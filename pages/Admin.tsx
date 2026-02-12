@@ -601,12 +601,15 @@ const LocalRulesTab: React.FC = () => {
 // --- INDEXER TAB ---
 const IndexerTab: React.FC = () => {
   const [stats, setStats] = useState<IndexStats | null>(null);
-  const [errors, setErrors] = useState<{errors: any[], total: number}>({errors: [], total: 0});
+  const [errors, setErrors] = useState<{errors: any[], total: number}>({errors: [], total: 0}); // preview (API recorta por limit)
   const [indexing, setIndexing] = useState(false);
   const [downloadingErrors, setDownloadingErrors] = useState(false);
+  const [errorsExportFmt, setErrorsExportFmt] = useState<'json' | 'csv'>('json');
 
   const [scheduler, setScheduler] = useState<any>(null);
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
+
+  const PREVIEW_LIMIT = 100;
 
   const loadStats = async () => {
     try {
@@ -616,7 +619,8 @@ const IndexerTab: React.FC = () => {
       setScheduler(await api.getScheduler().catch(() => null));
 
       if (s.error_count > 0) {
-        const e = await api.getIndexErrors({ index_version: s.index_version, limit: 100 });
+        // Preview: el endpoint /errors limita; el "full" se hace con /errors/export
+        const e = await api.getIndexErrors({ index_version: s.index_version, limit: PREVIEW_LIMIT });
         setErrors(e);
       } else {
         setErrors({ errors: [], total: 0 });
@@ -642,23 +646,12 @@ const IndexerTab: React.FC = () => {
     if (!stats || stats.error_count <= 0) return;
     setDownloadingErrors(true);
     try {
-      const full = await api.getIndexErrors({ index_version: stats.index_version, limit: stats.error_count });
-      const payload = {
+      // Usa /admin/index/errors/export (documentado) para obtener el total real.
+      await api.downloadIndexErrorsExport({
         index_version: stats.index_version,
-        generated_at: new Date().toISOString(),
-        total: full.total,
-        errors: full.errors,
-      };
-
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `dac_index_errors_${stats.index_version.substring(0, 8)}_${new Date().toISOString().slice(0,10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
+        limit: Math.min(stats.error_count, 5000),
+        fmt: errorsExportFmt
+      });
     } catch {
       alert('Download failed');
     } finally {
@@ -743,16 +736,33 @@ const IndexerTab: React.FC = () => {
           <div className="bg-red-50 p-4 border-b border-red-200 flex items-center justify-between gap-3">
             <div className="flex items-center">
               <AlertTriangle className="text-red-600 mr-2" size={20} />
-              <h3 className="text-red-900 font-semibold">Index Errors ({errors.total})</h3>
+              <div>
+                <h3 className="text-red-900 font-semibold">Index Errors ({stats.error_count})</h3>
+                <div className="text-xs text-red-800/70">
+                  Preview: {Math.min(errors.errors.length, 100)} (el endpoint /errors recorta por limit)
+                </div>
+              </div>
             </div>
 
-            <button
-              onClick={downloadFullErrors}
-              disabled={downloadingErrors || stats.error_count <= 0}
-              className="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
-            >
-              {downloadingErrors ? 'Descargando...' : 'Descargar completo'}
-            </button>
+            <div className="flex items-center gap-2">
+              <select
+                value={errorsExportFmt}
+                onChange={(e) => setErrorsExportFmt(e.target.value as any)}
+                className="px-2 py-2 rounded-lg border border-red-200 bg-white text-sm text-slate-700"
+                aria-label="Formato de export"
+              >
+                <option value="json">JSON</option>
+                <option value="csv">CSV</option>
+              </select>
+
+              <button
+                onClick={downloadFullErrors}
+                disabled={downloadingErrors || stats.error_count <= 0}
+                className="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
+              >
+                {downloadingErrors ? 'Descargando...' : 'Exportar completo'}
+              </button>
+            </div>
           </div>
           <div className="max-h-64 overflow-y-auto p-4 space-y-2 bg-slate-50">
             {errors.errors.map((err, i) => (

@@ -18,6 +18,7 @@ export const RuleSearch: React.FC = () => {
     status: '',
     product: '',
     author: '',
+    source_type: '',
   });
 
   // Export State
@@ -35,6 +36,18 @@ export const RuleSearch: React.FC = () => {
     // Load filter options on mount
     api.getFilters().then(setFilterOptions).catch(console.error);
   }, []);
+
+  const SOURCE_TYPES = [
+    { value: '', label: 'Todos los orígenes' },
+    { value: 'sigmahq', label: 'SigmaHQ' },
+    { value: 'local', label: 'Local (cualquiera)' },
+    { value: 'local_manual', label: 'Local (Manual)' },
+    { value: 'local_ai', label: 'Local (IA)' },
+    { value: 'local_import', label: 'Local (Import)' },
+  ] as const;
+
+  const sourceTypeLabel = (v?: string) =>
+    SOURCE_TYPES.find(o => o.value === v)?.label || v || '';
 
   const search = useCallback(async () => {
     setLoading(true);
@@ -85,7 +98,7 @@ export const RuleSearch: React.FC = () => {
   };
 
   const clearFilters = () => {
-    setFilters({ level: '', status: '', product: '', author: '' });
+    setFilters({ level: '', status: '', product: '', author: '', source_type: '' });
     setQuery('');
     setPage(1);
   };
@@ -226,6 +239,13 @@ export const RuleSearch: React.FC = () => {
                 {filterOptions?.authors.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
             </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Origen</label>
+              <select name="source_type" value={(filters as any).source_type} onChange={handleFilterChange} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-slate-50">
+                {SOURCE_TYPES.map(o => <option key={o.value || '__all__'} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
           </div>
           
           {showFilters && (
@@ -275,6 +295,12 @@ export const RuleSearch: React.FC = () => {
                       <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded font-medium">
                         {rule.logsource_product || 'generic'} / {rule.logsource_service || 'any'}
                       </span>
+
+                      {(rule as any).source_type && (
+                        <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-1 rounded border border-emerald-100 font-medium">
+                          {sourceTypeLabel((rule as any).source_type)}
+                        </span>
+                      )}
                       {rule.attack_ids && rule.attack_ids.slice(0, 4).map(tag => (
                         <span key={tag} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-1 rounded border border-indigo-100">{tag}</span>
                       ))}
@@ -406,6 +432,34 @@ export const RuleSearch: React.FC = () => {
                 <span className="text-slate-500 text-xs uppercase">Log Source</span>
                 <span className="font-medium">{selectedRule.logsource_product} {selectedRule.logsource_service ? `(${selectedRule.logsource_service})` : ''}</span>
               </div>
+
+              {(selectedRule as any).source_type && (
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs uppercase">Origen</span>
+                  <span className="font-medium">{sourceTypeLabel((selectedRule as any).source_type)}</span>
+                </div>
+              )}
+
+              {(selectedRule as any).created_by && (
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs uppercase">Created By</span>
+                  <span className="font-mono font-medium">{(selectedRule as any).created_by}</span>
+                </div>
+              )}
+
+              {(selectedRule as any).modified_by && (
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs uppercase">Modified By</span>
+                  <span className="font-mono font-medium">{(selectedRule as any).modified_by}</span>
+                </div>
+              )}
+
+              {(selectedRule as any).modified_at && (
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-xs uppercase">Modified At</span>
+                  <span className="font-medium">{(selectedRule as any).modified_at}</span>
+                </div>
+              )}
             </div>
 
             <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">

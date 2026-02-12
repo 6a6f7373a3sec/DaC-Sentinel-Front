@@ -316,6 +316,31 @@ class ApiService {
     return this.request<{errors: any[], total: number}>(`/admin/index/errors?${q.toString()}`);
   }
 
+  async downloadIndexErrorsExport(params: { index_version?: string; limit?: number; fmt?: 'json' | 'csv' } = {}): Promise<void> {
+    const q = new URLSearchParams();
+    if (params.index_version) q.set('index_version', params.index_version);
+    if (typeof params.limit === 'number') q.set('limit', String(params.limit));
+    q.set('fmt', params.fmt || 'json');
+
+    const response = await fetch(`${API_BASE_URL}/admin/index/errors/export?${q.toString()}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+
+    if (!response.ok) throw new Error('Index errors export failed');
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ext = (params.fmt || 'json') === 'csv' ? 'csv' : 'json';
+    const iv = params.index_version ? params.index_version.substring(0, 8) : 'unknown';
+    a.href = url;
+    a.download = `dac_index_errors_${iv}_${new Date().toISOString().slice(0,10)}.${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
   async triggerReindex(full: boolean): Promise<any> {
     return this.request('/admin/index/reindex', {
       method: 'POST',
