@@ -1,0 +1,4 @@
+{
+  "name": "DaC Sentinel",
+  "description": "Detection as Code management platform featuring rule generation, MITRE ATT&CK coverage analysis, and security dashboarding."
+}
