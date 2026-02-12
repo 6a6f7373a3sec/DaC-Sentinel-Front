@@ -169,11 +169,28 @@ const ImportTab: React.FC = () => {
   const [gitUrl, setGitUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
 
+  const [repoStatus, setRepoStatus] = useState<any>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+
+  const loadStatus = async () => {
+    setLoadingStatus(true);
+    try {
+      setRepoStatus(await api.getImportStatus());
+    } catch (e) {
+      setRepoStatus(null);
+    } finally {
+      setLoadingStatus(false);
+    }
+  };
+
+  useEffect(() => { loadStatus(); }, []);
+
   const handleSigmaImport = async () => {
     setLoading(true);
     try {
       const res = await api.importSigmaHQ();
       setResult(res);
+      await loadStatus();
     } catch (e: any) { alert(e.message); }
     setLoading(false);
   };
@@ -202,6 +219,40 @@ const ImportTab: React.FC = () => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="md:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div className="text-sm text-slate-700">
+          <span className="font-semibold">Repo status:</span>{' '}
+          {loadingStatus ? 'Loading...' : repoStatus ? (
+            <span className="font-mono text-xs text-slate-600">
+              {repoStatus.repo_path} • yaml:{repoStatus.yaml_count} • branch:{repoStatus.git_branch || '-'} • remote:{repoStatus.git_remote || '-'}
+            </span>
+          ) : (
+            <span className="text-slate-500">Unavailable</span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={loadStatus}
+            disabled={loadingStatus}
+            className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm disabled:opacity-50"
+          >
+            Refresh
+          </button>
+          <button
+            onClick={async () => {
+              setLoading(true);
+              try { setResult(await api.importSync()); await loadStatus(); }
+              catch (e: any) { alert(e.message); }
+              setLoading(false);
+            }}
+            disabled={loading}
+            className="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
+          >
+            Sync Repo
+          </button>
+        </div>
+      </div>
+
       {/* SigmaHQ */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div className="h-12 w-12 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center mb-4">
@@ -550,16 +601,25 @@ const LocalRulesTab: React.FC = () => {
 // --- INDEXER TAB ---
 const IndexerTab: React.FC = () => {
   const [stats, setStats] = useState<IndexStats | null>(null);
-  const [errors, setErrors] = useState<{errors: string[], total: number}>({errors: [], total: 0});
+  const [errors, setErrors] = useState<{errors: any[], total: number}>({errors: [], total: 0});
   const [indexing, setIndexing] = useState(false);
+  const [downloadingErrors, setDownloadingErrors] = useState(false);
+
+  const [scheduler, setScheduler] = useState<any>(null);
+  const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
 
   const loadStats = async () => {
     try {
       const s = await api.getIndexStats();
       setStats(s);
+
+      setScheduler(await api.getScheduler().catch(() => null));
+
       if (s.error_count > 0) {
-        const e = await api.getIndexErrors();
+        const e = await api.getIndexErrors({ index_version: s.index_version, limit: 100 });
         setErrors(e);
+      } else {
+        setErrors({ errors: [], total: 0 });
       }
     } catch(err) { console.error(err); }
   };
@@ -575,6 +635,34 @@ const IndexerTab: React.FC = () => {
       alert('Reindex failed');
     } finally {
       setIndexing(false);
+    }
+  };
+
+  const downloadFullErrors = async () => {
+    if (!stats || stats.error_count <= 0) return;
+    setDownloadingErrors(true);
+    try {
+      const full = await api.getIndexErrors({ index_version: stats.index_version, limit: stats.error_count });
+      const payload = {
+        index_version: stats.index_version,
+        generated_at: new Date().toISOString(),
+        total: full.total,
+        errors: full.errors,
+      };
+
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dac_index_errors_${stats.index_version.substring(0, 8)}_${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      alert('Download failed');
+    } finally {
+      setDownloadingErrors(false);
     }
   };
 
@@ -605,28 +693,71 @@ const IndexerTab: React.FC = () => {
           </div>
         </div>
         
-        <div className="flex justify-end border-t border-slate-100 pt-6">
-          <button 
-            onClick={handleReindex}
-            disabled={indexing}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            <Play size={18} className={`mr-2 ${indexing ? 'animate-spin' : ''}`} />
-            {indexing ? 'Indexing...' : 'Trigger Full Reindex'}
-          </button>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-t border-slate-100 pt-6">
+          <div className="text-sm text-slate-600">
+            <span className="font-semibold">Scheduler:</span>{' '}
+            {scheduler ? (scheduler.running ? 'running' : 'idle') : 'unavailable'}
+          </div>
+
+          <div className="flex flex-wrap gap-2 md:justify-end">
+            <button
+              onClick={async () => {
+                setTriggeringJob('reindex_job');
+                try { await api.triggerSchedulerJob('reindex_job'); await loadStats(); }
+                catch { alert('Trigger failed'); }
+                setTriggeringJob(null);
+              }}
+              disabled={!!triggeringJob || indexing}
+              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm disabled:opacity-50"
+            >
+              {triggeringJob === 'reindex_job' ? 'Triggering...' : 'Trigger reindex_job'}
+            </button>
+
+            <button
+              onClick={async () => {
+                setTriggeringJob('mitre_update_job');
+                try { await api.triggerSchedulerJob('mitre_update_job'); await loadStats(); }
+                catch { alert('Trigger failed'); }
+                setTriggeringJob(null);
+              }}
+              disabled={!!triggeringJob || indexing}
+              className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm disabled:opacity-50"
+            >
+              {triggeringJob === 'mitre_update_job' ? 'Triggering...' : 'Trigger mitre_update_job'}
+            </button>
+
+            <button 
+              onClick={handleReindex}
+              disabled={indexing || !!triggeringJob}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              <Play size={18} className={`mr-2 ${indexing ? 'animate-spin' : ''}`} />
+              {indexing ? 'Indexing...' : 'Trigger Full Reindex'}
+            </button>
+          </div>
         </div>
       </div>
 
       {stats.error_count > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden">
-          <div className="bg-red-50 p-4 border-b border-red-200 flex items-center">
-            <AlertTriangle className="text-red-600 mr-2" size={20} />
-            <h3 className="text-red-900 font-semibold">Index Errors ({errors.total})</h3>
+          <div className="bg-red-50 p-4 border-b border-red-200 flex items-center justify-between gap-3">
+            <div className="flex items-center">
+              <AlertTriangle className="text-red-600 mr-2" size={20} />
+              <h3 className="text-red-900 font-semibold">Index Errors ({errors.total})</h3>
+            </div>
+
+            <button
+              onClick={downloadFullErrors}
+              disabled={downloadingErrors || stats.error_count <= 0}
+              className="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm disabled:opacity-50"
+            >
+              {downloadingErrors ? 'Descargando...' : 'Descargar completo'}
+            </button>
           </div>
           <div className="max-h-64 overflow-y-auto p-4 space-y-2 bg-slate-50">
             {errors.errors.map((err, i) => (
               <div key={i} className="text-xs font-mono text-red-600 bg-red-50 p-2 rounded border border-red-100 break-all">
-                {err}
+                {typeof err === 'string' ? err : (err?.error_message || err?.message || JSON.stringify(err))}
               </div>
             ))}
           </div>

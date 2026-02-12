@@ -56,6 +56,11 @@ class ApiService {
     return response.json();
   }
 
+  // Health
+  async health(): Promise<any> {
+    return this.request<any>('/health');
+  }
+
   // Auth
   async login(email: string, password: string): Promise<LoginResponse> {
     const data = await this.request<LoginResponse>('/auth/login', {
@@ -103,6 +108,11 @@ class ApiService {
     return this.request<RuleDetail>(`/dashboard/rules/${ruleId}`);
   }
 
+  async getRulesByAttackTechnique(technique_id: string, page = 1, page_size = 20): Promise<SearchResponse> {
+    const q = new URLSearchParams({ page: String(page), page_size: String(page_size) }).toString();
+    return this.request<SearchResponse>(`/dashboard/attack/${encodeURIComponent(technique_id)}?${q}`);
+  }
+
   // Export
   async estimateExport(params: Record<string, any>): Promise<ExportEstimate> {
     const query = new URLSearchParams();
@@ -142,6 +152,62 @@ class ApiService {
     window.URL.revokeObjectURL(url);
   }
 
+  async exportAsync(params: Record<string, any>): Promise<any> {
+    const payload: Record<string, any> = {};
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') payload[key] = value;
+    });
+
+    return this.request<any>('/export/async', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getExportStatus(job_id: string): Promise<any> {
+    return this.request<any>(`/export/status/${encodeURIComponent(job_id)}`);
+  }
+
+  async downloadExportJob(job_id: string, filename?: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/export/download/${encodeURIComponent(job_id)}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
+    });
+
+    if (!response.ok) throw new Error("Download failed");
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `dac_export_${job_id}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
+  async exportByIds(payload: { rule_ids: string[]; filters_applied?: any; index_version?: string }): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/export/by-ids`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) throw new Error("Export by ids failed");
+
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sigma_rules_export_selected_${Date.now()}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
   // Generator
   async generateRule(prompt: string): Promise<GenerateRuleResponse> {
     return this.request<GenerateRuleResponse>('/generate-rule', {
@@ -150,10 +216,14 @@ class ApiService {
     });
   }
 
-  async createProposal(yaml_code: string, branch_name?: string): Promise<ProposalResponse> {
+  async createProposal(
+    yaml_code: string,
+    branch_name?: string,
+    reuse_branch?: boolean
+  ): Promise<ProposalResponse> {
     return this.request<ProposalResponse>('/proposal', {
       method: 'POST',
-      body: JSON.stringify({ yaml_code, branch_name }),
+      body: JSON.stringify({ yaml_code, branch_name, reuse_branch }),
     });
   }
 
@@ -161,13 +231,54 @@ class ApiService {
     return this.request<BranchInfo>('/branches');
   }
 
+  async mergeBranch(branch_name: string): Promise<any> {
+    return this.request<any>(`/branches/${encodeURIComponent(branch_name)}/merge`, { method: 'POST' });
+  }
+
+  async deleteBranch(branch_name: string): Promise<any> {
+    return this.request<any>(`/branches/${encodeURIComponent(branch_name)}`, { method: 'DELETE' });
+  }
+
   // MITRE
+  async getMitreVersions(): Promise<any[]> {
+    return this.request<any[]>('/mitre/versions');
+  }
+
+  async getMitreCoverage(domain = 'enterprise'): Promise<any> {
+    return this.request<any>(`/mitre/coverage?domain=${domain}`);
+  }
+
   async getMitreMatrix(domain = 'enterprise'): Promise<MitreMatrixResponse> {
     return this.request<MitreMatrixResponse>(`/mitre/matrix?domain=${domain}`);
   }
 
-  async updateMitre(domain = 'enterprise'): Promise<any> {
-    return this.request(`/mitre/update?domain=${domain}`, { method: 'POST' });
+  async getMitreTechnique(technique_id: string, domain = 'enterprise'): Promise<any> {
+    return this.request<any>(`/mitre/techniques/${encodeURIComponent(technique_id)}?domain=${domain}`);
+  }
+
+  async listMitreTechniques(params: {
+    domain?: string;
+    tactic?: string;
+    covered_only?: boolean;
+    uncovered_only?: boolean;
+  } = {}): Promise<any[]> {
+    const q = new URLSearchParams();
+    if (params.domain) q.set('domain', params.domain);
+    if (params.tactic) q.set('tactic', params.tactic);
+    if (params.covered_only) q.set('covered_only', 'true');
+    if (params.uncovered_only) q.set('uncovered_only', 'true');
+    const qs = q.toString();
+    return this.request<any[]>(`/mitre/techniques${qs ? `?${qs}` : ''}`);
+  }
+
+  async listMitreTactics(domain = 'enterprise'): Promise<any[]> {
+    return this.request<any[]>(`/mitre/tactics?domain=${domain}`);
+  }
+
+  async updateMitre(domain = 'enterprise', force = false): Promise<any> {
+    const qs = new URLSearchParams({ domain });
+    if (force) qs.set('force', 'true');
+    return this.request(`/mitre/update?${qs.toString()}`, { method: 'POST' });
   }
 
   // Admin Users
@@ -198,8 +309,11 @@ class ApiService {
     return this.request<IndexStats>('/admin/index/stats');
   }
 
-  async getIndexErrors(limit = 100): Promise<{errors: string[], total: number}> {
-    return this.request<{errors: string[], total: number}>(`/admin/index/errors?limit=${limit}`);
+  async getIndexErrors(params: { index_version?: string; limit?: number } = {}): Promise<{errors: any[], total: number}> {
+    const q = new URLSearchParams();
+    if (params.index_version) q.set('index_version', params.index_version);
+    q.set('limit', String(params.limit ?? 100));
+    return this.request<{errors: any[], total: number}>(`/admin/index/errors?${q.toString()}`);
   }
 
   async triggerReindex(full: boolean): Promise<any> {
@@ -213,21 +327,29 @@ class ApiService {
     return this.request<SchedulerStatus>('/admin/index/scheduler');
   }
 
-  async importSigmaHQ(): Promise<ImportResult> {
-    return this.request<ImportResult>('/admin/import/sigmahq', { method: 'POST' });
+  async triggerSchedulerJob(job_id: 'reindex_job' | 'mitre_update_job'): Promise<any> {
+    return this.request<any>(`/admin/index/scheduler/trigger/${job_id}`, { method: 'POST' });
   }
 
-  async importGit(repoUrl: string, branch?: string): Promise<ImportResult> {
+  async getImportStatus(): Promise<any> {
+    return this.request<any>('/admin/import/status');
+  }
+
+  async importSigmaHQ(branch = 'master'): Promise<ImportResult> {
+    return this.request<ImportResult>(`/admin/import/sigmahq?branch=${encodeURIComponent(branch)}`, { method: 'POST' });
+  }
+
+  async importGit(repoUrl: string, branch?: string, rules_subpath?: string): Promise<ImportResult> {
     return this.request<ImportResult>('/admin/import/git', {
       method: 'POST',
-      body: JSON.stringify({ repo_url: repoUrl, branch })
+      body: JSON.stringify({ repo_url: repoUrl, branch, rules_subpath })
     });
   }
 
   async importZip(file: File): Promise<ImportResult> {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     // Manual fetch for Multipart
     const response = await fetch(`${API_BASE_URL}/admin/import/zip`, {
       method: 'POST',
@@ -236,12 +358,16 @@ class ApiService {
       },
       body: formData
     });
-    
+
     if (!response.ok) {
-       const err = await response.json().catch(() => ({}));
-       throw new Error(err.detail || "Import failed");
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || "Import failed");
     }
     return response.json();
+  }
+
+  async importSync(): Promise<ImportResult> {
+    return this.request<ImportResult>('/admin/import/sync', { method: 'POST' });
   }
 
   // Admin Local Rules (custom / IA)

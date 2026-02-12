@@ -22,6 +22,9 @@ export const RuleSearch: React.FC = () => {
 
   // Export State
   const [exporting, setExporting] = useState(false);
+  const [exportJobId, setExportJobId] = useState<string | null>(() => sessionStorage.getItem('dac_export_job_id'));
+  const [exportStatus, setExportStatus] = useState<any>(null);
+  const [exportStatusOpen, setExportStatusOpen] = useState(false);
 
   // Detail Modal State
   const [selectedRule, setSelectedRule] = useState<RuleDetail | null>(null);
@@ -57,6 +60,25 @@ export const RuleSearch: React.FC = () => {
     return () => clearTimeout(timer);
   }, [search]);
 
+  useEffect(() => {
+    if (!exportJobId) return;
+    let stopped = false;
+
+    const poll = async () => {
+      try {
+        const st = await api.getExportStatus(exportJobId);
+        if (!stopped) setExportStatus(st);
+        if (st?.status === 'completed' || st?.status === 'failed') return;
+        setTimeout(poll, 1500);
+      } catch {
+        if (!stopped) setTimeout(poll, 3000);
+      }
+    };
+
+    poll();
+    return () => { stopped = true; };
+  }, [exportJobId]);
+
   const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setFilters({ ...filters, [e.target.name]: e.target.value });
     setPage(1);
@@ -71,12 +93,22 @@ export const RuleSearch: React.FC = () => {
   const handleExport = async () => {
     setExporting(true);
     try {
-      // Basic implementation: check estimate then download
-      const estimate = await api.estimateExport({ q: query, ...filters });
+      const params = { q: query, ...filters };
+      const estimate = await api.estimateExport(params);
+
       if (estimate.rule_count === 0) {
         alert("No rules to export matching current filters.");
+      } else if (estimate.exceeds_limits || estimate.mode === 'async') {
+        const res = await api.exportAsync(params);
+        const jobId = res?.job_id;
+        if (!jobId) throw new Error('Async export did not return job_id');
+
+        setExportJobId(jobId);
+        sessionStorage.setItem('dac_export_job_id', jobId);
+        setExportStatus(res);
+        setExportStatusOpen(true);
       } else {
-        await api.downloadExport({ q: query, ...filters });
+        await api.downloadExport(params);
       }
     } catch (error) {
       console.error(error);
@@ -130,14 +162,30 @@ export const RuleSearch: React.FC = () => {
              />
            </div>
 
-           <button 
-             onClick={handleExport}
-             disabled={exporting || loading}
-             className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 whitespace-nowrap"
-           >
-             <Download size={18} className={`mr-2 ${exporting ? 'animate-bounce' : ''}`} />
-             {exporting ? 'Exportando...' : 'Exportar'}
-           </button>
+           <div className="flex items-center gap-2">
+             {exportJobId && (
+               <button
+                 onClick={() => setExportStatusOpen(true)}
+                 className="flex items-center px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+               >
+                 <Activity size={18} className="mr-2" />
+                 {exportStatus?.status === 'completed'
+                   ? 'Export listo'
+                   : exportStatus?.status === 'failed'
+                     ? 'Export falló'
+                     : 'Export en progreso'}
+               </button>
+             )}
+
+             <button 
+               onClick={handleExport}
+               disabled={exporting || loading}
+               className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 whitespace-nowrap"
+             >
+               <Download size={18} className={`mr-2 ${exporting ? 'animate-bounce' : ''}`} />
+               {exporting ? 'Exportando...' : 'Exportar'}
+             </button>
+           </div>
         </div>
       </div>
 
@@ -266,6 +314,69 @@ export const RuleSearch: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Export Status Modal */}
+      <Modal
+        isOpen={exportStatusOpen}
+        onClose={() => setExportStatusOpen(false)}
+        title="Export en segundo plano"
+        size="md"
+      >
+        {!exportJobId ? (
+          <div className="text-sm text-slate-600">No hay export en curso.</div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-sm">
+              <Activity size={18} />
+              <span className="font-semibold">Status:</span>
+              <span className="font-mono">{exportStatus?.status || 'pending'}</span>
+            </div>
+
+            {exportStatus?.error && (
+              <div className="text-sm text-red-700 bg-red-50 p-3 rounded-lg border border-red-100 break-words">
+                {String(exportStatus.error)}
+              </div>
+            )}
+
+            {exportStatus?.status === 'completed' ? (
+              <button
+                onClick={async () => {
+                  try {
+                    await api.downloadExportJob(exportJobId);
+                    sessionStorage.removeItem('dac_export_job_id');
+                    setExportJobId(null);
+                    setExportStatus(null);
+                    setExportStatusOpen(false);
+                  } catch {
+                    alert('Download failed');
+                  }
+                }}
+                className="w-full py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Descargar ZIP
+              </button>
+            ) : (
+              <div className="text-sm text-slate-600">
+                Puedes cerrar esta ventana: el export seguirá en segundo plano.
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem('dac_export_job_id');
+                  setExportJobId(null);
+                  setExportStatus(null);
+                  setExportStatusOpen(false);
+                }}
+                className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm"
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Rule Detail Modal */}
       <Modal 
