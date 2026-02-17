@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { DashboardSummary } from '../types';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, Sector } from 'recharts';
 import { AlertCircle, CheckCircle, ShieldAlert, FileText } from 'lucide-react';
 import { COLORS } from '../constants';
 
@@ -45,17 +45,57 @@ export const Dashboard: React.FC = () => {
   }
 
   // Transform data for charts
-  const levelData = Object.entries(summary.by_level).map(([name, value]) => ({ name, value }));
-  const statusData = Object.entries(summary.by_status).map(([name, value]) => ({ name, value }));
+  const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'informational'] as const;
+  const severityRank = new Map(SEVERITY_ORDER.map((s, i) => [s, i]));
+
+  // Transform data for charts
+  const levelData = Object.entries(summary.by_level)
+    .map(([name, value]) => {
+      const key = String(name).toLowerCase().trim(); // normaliza para ordenar/colorear
+      return { name, key, value: Number(value) };
+    })
+    .sort((a, b) => {
+      const ra = severityRank.has(a.key as any) ? severityRank.get(a.key as any)! : 999;
+      const rb = severityRank.has(b.key as any) ? severityRank.get(b.key as any)! : 999;
+      if (ra !== rb) return ra - rb;
+      return a.key.localeCompare(b.key); // fallback para desconocidos
+    });
+
+  //const statusData = Object.entries(summary.by_status).map(([name, value]) => ({ name, value }));
   const productData = Object.entries(summary.by_product)
     .map(([name, value]) => ({ name, value: Number(value) }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
 
+  const renderSeveritySector = (props: any) => {
+    const { index, ...rest } = props;
+    //console.log('Rendering sector:', props);
+    return (
+      <Sector
+        {...rest}
+        fill={COLORS.severity[levelData[index]?.key ?? 'low'] || COLORS.chart[index % COLORS.chart.length]}
+      />
+    );
+  };
+
+  const renderLevelLegend = () => (
+    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-sm">
+      {levelData.map((item, index) => (
+        <div key={item.name} className="flex items-center gap-2">
+          <span
+            className="inline-block h-3 w-3 rounded-sm"
+            style={{ backgroundColor: COLORS.severity[item.key] || COLORS.chart[index % COLORS.chart.length] }}
+          />
+          <span className="text-slate-600">{item.name}</span>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-      
+
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Total de reglas" value={summary.total_rules} icon={FileText} color="bg-blue-600" />
@@ -79,13 +119,10 @@ export const Dashboard: React.FC = () => {
                   outerRadius={80}
                   paddingAngle={5}
                   dataKey="value"
-                >
-                  {levelData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS.chart[index % COLORS.chart.length]} />
-                  ))}
-                </Pie>
+                  shape={renderSeveritySector}
+                />
                 <Tooltip />
-                <Legend />
+                <Legend content={renderLevelLegend} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -98,8 +135,8 @@ export const Dashboard: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={productData} layout="vertical">
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12}} />
-                <Tooltip cursor={{fill: 'transparent'}} />
+                <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 12 }} />
+                <Tooltip cursor={{ fill: 'transparent' }} />
                 <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
