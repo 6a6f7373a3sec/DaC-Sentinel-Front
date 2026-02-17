@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, LayoutDashboard, Search, FileCode, Grid3X3, Settings, Menu, X, LogOut, User as UserIcon } from 'lucide-react';
+import { Shield, LayoutDashboard, Search, FileCode, Grid3X3, Settings, Menu, X, LogOut, User as UserIcon, Repeat2 } from 'lucide-react';
 import { UserRole } from '../types';
 
 interface LayoutProps {
@@ -59,6 +59,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <NavItem href="#/rules" icon={Search} label="Buscar reglas" active={currentPath === '#/rules'} />
           <NavItem href="#/generator" icon={FileCode} label="Generador de Reglas" active={currentPath === '#/generator'} />
           <NavItem href="#/mitre" icon={Grid3X3} label="Matriz MITRE" active={currentPath === '#/mitre'} />
+          <NavItem href="#/converter" icon={Repeat2} label="Sigma Converter" active={currentPath === '#/converter'} />
           
           {user?.roles.includes(UserRole.ADMIN) && (
              <NavItem href="#/admin" icon={Settings} label="Administración" active={currentPath === '#/admin'} />

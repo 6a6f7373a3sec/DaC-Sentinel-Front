@@ -395,6 +395,35 @@ class ApiService {
     return this.request<ImportResult>('/admin/import/sync', { method: 'POST' });
   }
 
+  // Sigma Converter
+  async getSigmaTargets(): Promise<{ name: string; description: string }[]> {
+    return this.request('/sigma/targets');
+  }
+
+  async getSigmaFormats(target?: string): Promise<{ name: string; description: string; target?: string }[]> {
+    const qs = target ? `?target=${encodeURIComponent(target)}` : '';
+    return this.request(`/sigma/formats${qs}`);
+  }
+
+  async getSigmaPipelines(target?: string): Promise<{ name: string; targets: string[] }[]> {
+    const qs = target ? `?target=${encodeURIComponent(target)}` : '';
+    return this.request(`/sigma/pipelines${qs}`);
+  }
+
+  async convertSigmaRule(payload: {
+    rule: string;
+    target: string;
+    format?: string;
+    pipeline?: string[];
+    pipeline_yaml?: string;
+    html_escape?: boolean;
+  }): Promise<{ result: string }> {
+    return this.request('/sigma/convert', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // Admin Local Rules (custom / IA)
   async listLocalRules(params: { page?: number; page_size?: number; q?: string } = {}): Promise<any> {
     const query = new URLSearchParams();

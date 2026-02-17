@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { MitreMatrixResponse, RuleDetail, UserRole } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { RefreshCw, X, ExternalLink, ShieldAlert, FileText, ArrowLeft, Copy, Check, Filter } from 'lucide-react';
+import { RefreshCw, X, ExternalLink, ShieldAlert, FileText, ArrowLeft, Copy, Check, Filter, Repeat2 } from 'lucide-react';
+import { writeConverterHandoff } from '../hooks/useConverterHandoff';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface PanelData {
@@ -114,14 +115,26 @@ const RuleDetailView: React.FC<{
                 <div className="text-[10px] font-semibold text-slate-400 uppercase flex items-center gap-1">
                   <FileText size={11} /> YAML
                 </div>
-                <button
-                  onClick={copyYaml}
-                  className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 transition-colors"
-                  aria-label="Copiar YAML"
-                >
-                  {copied ? <Check size={12} /> : <Copy size={12} />}
-                  {copied ? 'Copiado' : 'Copiar'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      writeConverterHandoff(rule.yaml_content);
+                      window.location.hash = '#/converter';
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 transition-colors"
+                    aria-label="Convertir regla"
+                  >
+                    <Repeat2 size={12} /> Convertir
+                  </button>
+                  <button
+                    onClick={copyYaml}
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 transition-colors"
+                    aria-label="Copiar YAML"
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />}
+                    {copied ? 'Copiado' : 'Copiar'}
+                  </button>
+                </div>
               </div>
               <pre className="bg-slate-900 text-green-400 text-[11px] font-mono p-3 rounded-lg overflow-x-auto leading-relaxed max-h-64 custom-scrollbar">
                 <code>{rule.yaml_content}</code>

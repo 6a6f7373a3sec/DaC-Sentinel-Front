@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../services/api';
 import { RuleListItem, SearchResponse, RuleDetail, FilterOptions } from '../types';
-import { Search, Filter, ChevronLeft, ChevronRight, X, Download, FileText, Activity } from 'lucide-react';
+import { Search, Filter, ChevronLeft, ChevronRight, X, Download, FileText, Activity, Repeat2 } from 'lucide-react';
+import { writeConverterHandoff } from '../hooks/useConverterHandoff';
 import { Modal } from '../components/Modal';
 
 export const RuleSearch: React.FC = () => {
@@ -469,7 +470,18 @@ export const RuleSearch: React.FC = () => {
 
             <div>
               <div className="flex justify-between items-center mb-2">
-                 <h4 className="text-sm font-bold text-slate-700 flex items-center"><FileText size={16} className="mr-2"/> Rule Source (YAML)</h4>
+                <h4 className="text-sm font-bold text-slate-700 flex items-center"><FileText size={16} className="mr-2"/> Rule Source (YAML)</h4>
+                {selectedRule.yaml_content && (
+                  <button
+                    onClick={() => {
+                      writeConverterHandoff(selectedRule.yaml_content);
+                      window.location.hash = '#/converter';
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                  >
+                    <Repeat2 size={14} /> Convertir
+                  </button>
+                )}
               </div>
               <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800">
                 <pre className="p-4 text-xs font-mono text-green-400 overflow-x-auto custom-scrollbar">
