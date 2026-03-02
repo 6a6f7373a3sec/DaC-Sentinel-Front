@@ -1,4 +1,6 @@
-export const API_BASE_URL = 'http://localhost:8000/api/v1';
+// Use environment variable in Docker, fallback to localhost for local dev
+// In Docker: VITE_API_URL should be /api (nginx proxies /api/ to backend)
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export const COLORS = {
   primary: '#2563eb', // blue-600
