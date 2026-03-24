@@ -3,13 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DaC Sentinel - Detection as Code Platform</title>
+    <title>DaC SM
+ - Detection as Code Platform</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Poppins', 'system-ui', 'sans-serif'],
+              mono: ['Roboto Mono', 'monospace'],
+            },
             colors: {
+              a3sec: {
+                dark:   '#1E1C2A',
+                deeper: '#161422',
+                surface:'#252336',
+                border: '#2E2C3E',
+                muted:  '#3A3850',
+              },
+              brand: {
+                green:  '#99D1C5',
+                purple: '#928FC5',
+                blue:   '#528BE0',
+                red:    '#E76351',
+              },
               slate: {
                 850: '#1e293b',
                 900: '#0f172a',
@@ -21,20 +42,20 @@
       }
     </script>
     <style>
-      /* Custom scrollbar for data tables */
+      /* Custom scrollbar for dark theme */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #f1f5f9; 
+        background: #1E1C2A; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; 
+        background: #3A3850; 
         border-radius: 4px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
+        background: #928FC5; 
       }
     </style>
   <script type="importmap">
@@ -48,9 +69,8 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-50 text-slate-900 antialiased">
+  <body class="bg-a3sec-dark text-white antialiased font-sans">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

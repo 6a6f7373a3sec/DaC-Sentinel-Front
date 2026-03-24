@@ -150,14 +150,14 @@ export const RuleSearch: React.FC = () => {
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Librería de Reglas</h1>
+          <h1 className="text-2xl font-bold text-white">Librería de Reglas</h1>
           <p className="text-sm text-slate-500">Buscar, filtrar y exportar reglas de detección</p>
         </div>
         
         <div className="flex gap-2 w-full md:w-auto">
            <button 
              onClick={() => setShowFilters(!showFilters)}
-             className={`p-2 rounded-lg border ${showFilters ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-slate-300 text-slate-600'} md:hidden`}
+             className={`p-2 rounded-lg border ${showFilters ? 'bg-brand-green/10 border-brand-green/20 text-brand-green' : 'bg-a3sec-surface border-a3sec-muted text-slate-400'} md:hidden`}
            >
              <Filter size={20} />
            </button>
@@ -167,7 +167,7 @@ export const RuleSearch: React.FC = () => {
              <input
                type="text"
                placeholder="Buscar..."
-               className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+               className="w-full pl-10 pr-4 py-2 rounded-lg border border-a3sec-muted bg-a3sec-surface focus:outline-none focus:ring-2 focus:ring-brand-green"
                value={query}
                onChange={(e) => {
                  setQuery(e.target.value);
@@ -180,7 +180,7 @@ export const RuleSearch: React.FC = () => {
              {exportJobId && (
                <button
                  onClick={() => setExportStatusOpen(true)}
-                 className="flex items-center px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+                 className="flex items-center px-3 py-2 rounded-lg border border-a3sec-muted text-slate-300 hover:bg-a3sec-deeper whitespace-nowrap"
                >
                  <Activity size={18} className="mr-2" />
                  {exportStatus?.status === 'completed'
@@ -194,7 +194,7 @@ export const RuleSearch: React.FC = () => {
              <button 
                onClick={handleExport}
                disabled={exporting || loading}
-               className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50 whitespace-nowrap"
+               className="flex items-center px-4 py-2 bg-brand-green text-a3sec-dark rounded-lg hover:bg-a3sec-surface disabled:opacity-50 whitespace-nowrap"
              >
                <Download size={18} className={`mr-2 ${exporting ? 'animate-bounce' : ''}`} />
                {exporting ? 'Exportando...' : 'Exportar'}
@@ -205,37 +205,37 @@ export const RuleSearch: React.FC = () => {
 
       <div className="flex flex-1 gap-6 overflow-hidden">
         {/* Filters Sidebar */}
-        <div className={`w-64 bg-white p-4 rounded-xl border border-slate-200 shadow-sm overflow-y-auto ${showFilters ? 'fixed inset-0 z-40 m-4 md:static md:m-0' : 'hidden md:block'}`}>
+        <div className={`w-64 bg-a3sec-surface p-4 rounded-xl border border-a3sec-border shadow-sm overflow-y-auto ${showFilters ? 'fixed inset-0 z-40 m-4 md:static md:m-0' : 'hidden md:block'}`}>
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-semibold text-slate-800">Filtros</h3>
-            <button onClick={clearFilters} className="text-xs text-blue-600 hover:underline">Limpiar todo</button>
+            <h3 className="font-semibold text-white">Filtros</h3>
+            <button onClick={clearFilters} className="text-xs text-brand-green hover:underline">Limpiar todo</button>
           </div>
           
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Estado</label>
-              <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-slate-50">
+              <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full p-2 border border-a3sec-muted rounded-md text-sm bg-a3sec-deeper">
                 <option value="">Todos los estados</option>
                 {filterOptions?.statuses.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Nivel</label>
-              <select name="level" value={filters.level} onChange={handleFilterChange} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-slate-50">
+              <select name="level" value={filters.level} onChange={handleFilterChange} className="w-full p-2 border border-a3sec-muted rounded-md text-sm bg-a3sec-deeper">
                 <option value="">Todos los niveles</option>
                 {filterOptions?.levels.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
             </div>
              <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Producto</label>
-              <select name="product" value={filters.product} onChange={handleFilterChange} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-slate-50">
+              <select name="product" value={filters.product} onChange={handleFilterChange} className="w-full p-2 border border-a3sec-muted rounded-md text-sm bg-a3sec-deeper">
                 <option value="">Todos los productos</option>
                 {filterOptions?.products.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Autor</label>
-              <select name="author" value={filters.author} onChange={handleFilterChange} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-slate-50">
+              <select name="author" value={filters.author} onChange={handleFilterChange} className="w-full p-2 border border-a3sec-muted rounded-md text-sm bg-a3sec-deeper">
                 <option value="">Todos los autores</option>
                 {filterOptions?.authors.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
@@ -243,14 +243,14 @@ export const RuleSearch: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Origen</label>
-              <select name="source_type" value={(filters as any).source_type} onChange={handleFilterChange} className="w-full p-2 border border-slate-300 rounded-md text-sm bg-slate-50">
+              <select name="source_type" value={(filters as any).source_type} onChange={handleFilterChange} className="w-full p-2 border border-a3sec-muted rounded-md text-sm bg-a3sec-deeper">
                 {SOURCE_TYPES.map(o => <option key={o.value || '__all__'} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           </div>
           
           {showFilters && (
-            <button onClick={() => setShowFilters(false)} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg md:hidden">Aplicar filtros</button>
+            <button onClick={() => setShowFilters(false)} className="mt-6 w-full py-2 bg-brand-green text-a3sec-dark text-white rounded-lg md:hidden">Aplicar filtros</button>
           )}
         </div>
 
@@ -258,7 +258,7 @@ export const RuleSearch: React.FC = () => {
         <div className="flex-1 overflow-y-auto flex flex-col pr-2">
           {loading ? (
             <div className="flex-1 flex justify-center items-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-green"></div>
             </div>
           ) : results?.rules && results.rules.length > 0 ? (
             <>
@@ -271,29 +271,29 @@ export const RuleSearch: React.FC = () => {
                   <div 
                     key={rule.id} 
                     onClick={() => openRuleDetail(rule.id)}
-                    className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
+                    className="bg-a3sec-surface p-4 rounded-xl border border-a3sec-border shadow-sm hover:shadow-md hover:border-brand-green/20 transition-all cursor-pointer group"
                   >
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
                         <div className="flex items-center">
-                          <h3 className="font-semibold text-slate-900 text-lg group-hover:text-blue-600 transition-colors">{rule.title}</h3>
+                          <h3 className="font-semibold text-white text-lg group-hover:text-brand-green transition-colors">{rule.title}</h3>
                           {rule.status === 'experimental' && <Activity size={14} className="ml-2 text-yellow-500" />}
                         </div>
                         <p className="text-xs text-slate-400 font-mono mt-0.5">{rule.id}</p>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase tracking-wide border
-                        ${rule.level === 'critical' ? 'bg-red-50 text-red-700 border-red-100' :
+                        ${rule.level === 'critical' ? 'bg-brand-red/15 text-brand-red border-red-100' :
                           rule.level === 'high' ? 'bg-orange-50 text-orange-700 border-orange-100' :
                           rule.level === 'medium' ? 'bg-yellow-50 text-yellow-700 border-yellow-100' :
-                          'bg-blue-50 text-blue-700 border-blue-100'}`}>
+                          'bg-brand-green/10 text-brand-green border-blue-100'}`}>
                         {rule.level}
                       </span>
                     </div>
                     
-                    <p className="text-slate-600 text-sm mb-3 line-clamp-2">{rule.description}</p>
+                    <p className="text-slate-400 text-sm mb-3 line-clamp-2">{rule.description}</p>
                     
                     <div className="flex flex-wrap gap-2 items-center">
-                      <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded font-medium">
+                      <span className="text-xs bg-a3sec-dark text-slate-300 px-2 py-1 rounded font-medium">
                         {rule.logsource_product || 'generic'} / {rule.logsource_service || 'any'}
                       </span>
 
@@ -316,17 +316,17 @@ export const RuleSearch: React.FC = () => {
                   <button 
                     disabled={page === 1}
                     onClick={() => setPage(p => p - 1)}
-                    className="p-2 rounded hover:bg-white hover:shadow-sm disabled:opacity-30"
+                    className="p-2 rounded hover:bg-a3sec-surface hover:shadow-sm disabled:opacity-30"
                   >
                     <ChevronLeft size={20} />
                   </button>
-                  <span className="text-sm font-medium text-slate-600">
+                  <span className="text-sm font-medium text-slate-400">
                     {page}
                   </span>
                   <button 
                     disabled={page === results.total_pages}
                     onClick={() => setPage(p => p + 1)}
-                    className="p-2 rounded hover:bg-white hover:shadow-sm disabled:opacity-30"
+                    className="p-2 rounded hover:bg-a3sec-surface hover:shadow-sm disabled:opacity-30"
                   >
                     <ChevronRight size={20} />
                   </button>
@@ -350,7 +350,7 @@ export const RuleSearch: React.FC = () => {
         size="md"
       >
         {!exportJobId ? (
-          <div className="text-sm text-slate-600">No hay export en curso.</div>
+          <div className="text-sm text-slate-400">No hay export en curso.</div>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center gap-2 text-sm">
@@ -383,7 +383,7 @@ export const RuleSearch: React.FC = () => {
                 Descargar ZIP
               </button>
             ) : (
-              <div className="text-sm text-slate-600">
+              <div className="text-sm text-slate-400">
                 Puedes cerrar esta ventana: el export seguirá en segundo plano.
               </div>
             )}
@@ -396,7 +396,7 @@ export const RuleSearch: React.FC = () => {
                   setExportStatus(null);
                   setExportStatusOpen(false);
                 }}
-                className="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm"
+                className="px-3 py-2 rounded-lg border border-a3sec-muted text-slate-300 hover:bg-a3sec-deeper text-sm"
               >
                 Limpiar
               </button>
@@ -413,7 +413,7 @@ export const RuleSearch: React.FC = () => {
         size="xl"
       >
         {loadingDetail || !selectedRule ? (
-          <div className="p-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>
+          <div className="p-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-green"></div></div>
         ) : (
           <div className="space-y-6">
             <div className="flex flex-wrap gap-4 text-sm">
@@ -463,27 +463,27 @@ export const RuleSearch: React.FC = () => {
               )}
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-              <h4 className="text-sm font-bold text-slate-700 mb-2">Description</h4>
-              <p className="text-slate-600">{selectedRule.description}</p>
+            <div className="bg-a3sec-deeper p-4 rounded-lg border border-a3sec-border">
+              <h4 className="text-sm font-bold text-slate-300 mb-2">Description</h4>
+              <p className="text-slate-400">{selectedRule.description}</p>
             </div>
 
             <div>
               <div className="flex justify-between items-center mb-2">
-                <h4 className="text-sm font-bold text-slate-700 flex items-center"><FileText size={16} className="mr-2"/> Rule Source (YAML)</h4>
+                <h4 className="text-sm font-bold text-slate-300 flex items-center"><FileText size={16} className="mr-2"/> Rule Source (YAML)</h4>
                 {selectedRule.yaml_content && (
                   <button
                     onClick={() => {
                       writeConverterHandoff(selectedRule.yaml_content);
                       window.location.hash = '#/converter';
                     }}
-                    className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                    className="flex items-center gap-1.5 text-xs font-medium text-brand-green hover:text-blue-800 transition-colors"
                   >
                     <Repeat2 size={14} /> Convertir
                   </button>
                 )}
               </div>
-              <div className="bg-slate-900 rounded-lg overflow-hidden border border-slate-800">
+              <div className="bg-slate-900 rounded-lg overflow-hidden border border-a3sec-border">
                 <pre className="p-4 text-xs font-mono text-green-400 overflow-x-auto custom-scrollbar">
                   <code>{selectedRule.yaml_content}</code>
                 </pre>

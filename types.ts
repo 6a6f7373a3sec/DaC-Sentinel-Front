@@ -2,7 +2,8 @@
 
 export enum UserRole {
   ADMIN = 'ADMIN',
-  ANALYST = 'ANALYST'
+  READ_WRITE = 'READ_WRITE',
+  READ_ONLY = 'READ_ONLY'
 }
 
 export interface User {

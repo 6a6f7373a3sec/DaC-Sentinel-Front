@@ -7,6 +7,7 @@ import { RuleSearch } from './pages/RuleSearch';
 import { RuleGenerator } from './pages/RuleGenerator';
 import { MitreMatrix } from './pages/MitreMatrix';
 import { SigmaConverter } from './pages/SigmaConverter';
+import { Clients } from './pages/Clients';
 import { AdminPanel } from './pages/Admin';
 
 interface PrivateRouteProps {
@@ -47,6 +48,7 @@ const AppContent = () => {
        route === '#/generator' ? <RuleGenerator /> :
        route === '#/mitre' ? <MitreMatrix /> :
        route === '#/converter' ? <SigmaConverter /> :
+       route === '#/clients' ? <Clients /> :
        route === '#/admin' ? <AdminPanel /> :
        <Dashboard />}
     </PrivateRoute>

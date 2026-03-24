@@ -14,10 +14,10 @@ interface PanelData {
 }
 
 const LEVEL_COLOR: Record<string, string> = {
-  critical: 'bg-red-50 text-red-700 border-red-100',
+  critical: 'bg-brand-red/15 text-brand-red border-red-100',
   high:     'bg-orange-50 text-orange-700 border-orange-100',
   medium:   'bg-yellow-50 text-yellow-700 border-yellow-100',
-  low:      'bg-blue-50 text-blue-700 border-blue-100',
+  low:      'bg-brand-green/10 text-brand-green border-blue-100',
 };
 
 // ─── Rule Detail View (sub-panel) ─────────────────────────────────────────────
@@ -47,24 +47,24 @@ const RuleDetailView: React.FC<{
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-200 bg-slate-50 shrink-0">
+      <div className="flex items-center gap-3 px-5 py-3 border-b border-a3sec-border bg-a3sec-deeper shrink-0">
         <button
           onClick={onBack}
           aria-label="Volver a la técnica"
-          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-blue-600 font-medium transition-colors"
+          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-brand-green font-medium transition-colors"
         >
           <ArrowLeft size={14} />
           <span className="truncate max-w-[140px]">{techName}</span>
         </button>
         <span className="text-slate-300">/</span>
-        <span className="text-xs text-slate-700 font-semibold truncate flex-1">
+        <span className="text-xs text-slate-300 font-semibold truncate flex-1">
           {loading ? '...' : rule?.title}
         </span>
       </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600" />
+          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-brand-green" />
         </div>
       ) : !rule ? (
         <div className="flex-1 flex items-center justify-center text-sm text-slate-400">
@@ -73,7 +73,7 @@ const RuleDetailView: React.FC<{
       ) : (
         <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
           <div>
-            <h3 className="text-base font-bold text-slate-900 leading-snug mb-2">{rule.title}</h3>
+            <h3 className="text-base font-bold text-white leading-snug mb-2">{rule.title}</h3>
             <div className="flex flex-wrap gap-2">
               {rule.level && (
                 <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${LEVEL_COLOR[rule.level] ?? LEVEL_COLOR.low}`}>
@@ -81,7 +81,7 @@ const RuleDetailView: React.FC<{
                 </span>
               )}
               {rule.status && (
-                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200">
+                <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border bg-a3sec-dark text-slate-400 border-a3sec-border">
                   {rule.status}
                 </span>
               )}
@@ -95,17 +95,17 @@ const RuleDetailView: React.FC<{
               { label: 'Date', value: rule.rule_date },
               { label: 'Log Source', value: [rule.logsource_product, rule.logsource_service].filter(Boolean).join(' / ') },
             ].map(({ label, value }) => value ? (
-              <div key={label} className="bg-slate-50 rounded-lg p-2.5 border border-slate-100">
+              <div key={label} className="bg-a3sec-deeper rounded-lg p-2.5 border border-a3sec-border">
                 <div className="text-[10px] font-semibold text-slate-400 uppercase mb-0.5">{label}</div>
-                <div className="font-mono text-slate-700 break-all leading-snug">{value}</div>
+                <div className="font-mono text-slate-300 break-all leading-snug">{value}</div>
               </div>
             ) : null)}
           </div>
 
           {rule.description && (
-            <div className="bg-slate-50 rounded-lg border border-slate-100 p-3">
+            <div className="bg-a3sec-deeper rounded-lg border border-a3sec-border p-3">
               <div className="text-[10px] font-semibold text-slate-400 uppercase mb-1">Description</div>
-              <p className="text-xs text-slate-700 leading-relaxed">{rule.description}</p>
+              <p className="text-xs text-slate-300 leading-relaxed">{rule.description}</p>
             </div>
           )}
 
@@ -121,14 +121,14 @@ const RuleDetailView: React.FC<{
                       writeConverterHandoff(rule.yaml_content);
                       window.location.hash = '#/converter';
                     }}
-                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 transition-colors"
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-brand-green transition-colors"
                     aria-label="Convertir regla"
                   >
                     <Repeat2 size={12} /> Convertir
                   </button>
                   <button
                     onClick={copyYaml}
-                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-blue-600 transition-colors"
+                    className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-brand-green transition-colors"
                     aria-label="Copiar YAML"
                   >
                     {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -183,13 +183,13 @@ const TechniqueDrawer: React.FC<{
         role="dialog"
         aria-modal="true"
         aria-label={data?.tech.name ?? 'Technique detail'}
-        className={`fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col overflow-hidden
+        className={`fixed top-0 right-0 h-full w-full max-w-md bg-a3sec-surface shadow-2xl z-50 flex flex-col overflow-hidden
           transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {data && (
           <>
-            <div className="flex items-start justify-between p-5 border-b border-slate-200 bg-slate-50 shrink-0">
+            <div className="flex items-start justify-between p-5 border-b border-a3sec-border bg-a3sec-deeper shrink-0">
               <div className="flex-1 mr-4">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-mono font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
@@ -201,12 +201,12 @@ const TechniqueDrawer: React.FC<{
                     </span>
                   )}
                 </div>
-                <h2 className="text-lg font-bold text-slate-900 leading-tight">{data.tech.name}</h2>
+                <h2 className="text-lg font-bold text-white leading-tight">{data.tech.name}</h2>
               </div>
               <button
                 onClick={onClose}
                 aria-label="Close panel"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-300 hover:bg-a3sec-muted transition-colors"
               >
                 <X size={20} />
               </button>
@@ -217,11 +217,11 @@ const TechniqueDrawer: React.FC<{
               <div className={`absolute inset-0 flex flex-col transition-transform duration-300 ease-in-out ${selectedRule ? '-translate-x-full' : 'translate-x-0'}`}>
                 <div className="flex-1 overflow-y-auto p-5 space-y-5 custom-scrollbar">
                   {data.techDetail?.description && (
-                    <div className="bg-slate-50 rounded-lg border border-slate-100 p-4">
+                    <div className="bg-a3sec-deeper rounded-lg border border-a3sec-border p-4">
                       <h3 className="text-xs font-semibold text-slate-500 uppercase mb-2 flex items-center gap-1">
                         <ShieldAlert size={13} /> Description
                       </h3>
-                      <p className="text-sm text-slate-700 leading-relaxed line-clamp-6">
+                      <p className="text-sm text-slate-300 leading-relaxed line-clamp-6">
                         {data.techDetail.description}
                       </p>
                       {(data.techDetail.url || data.tech.url) && (
@@ -252,7 +252,7 @@ const TechniqueDrawer: React.FC<{
                               <FileText size={13} /> Reglas asociadas
                             </h3>
                             {activeProduct && !data.loadingRules && (
-                              <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 border border-blue-100 px-2 py-0.5 rounded-full">
+                              <span className="text-[10px] font-semibold bg-brand-green/10 text-brand-green border border-blue-100 px-2 py-0.5 rounded-full">
                                 {filtered.length} / {data.rules.length} para {activeProduct}
                               </span>
                             )}
@@ -260,10 +260,10 @@ const TechniqueDrawer: React.FC<{
 
                           {data.loadingRules ? (
                             <div className="flex justify-center py-8">
-                              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-blue-600" />
+                              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-brand-green" />
                             </div>
                           ) : filtered.length === 0 ? (
-                            <div className="text-sm text-slate-400 text-center py-8 bg-slate-50 rounded-lg border border-slate-100">
+                            <div className="text-sm text-slate-400 text-center py-8 bg-a3sec-deeper rounded-lg border border-a3sec-border">
                               {activeProduct
                                 ? `Sin reglas para "${activeProduct}" en esta técnica.`
                                 : 'Sin reglas de detección para esta técnica.'}
@@ -275,10 +275,10 @@ const TechniqueDrawer: React.FC<{
                                   <button
                                     type="button"
                                     onClick={() => setSelectedRule({ id: rule.id })}
-                                    className="w-full text-left p-3 rounded-lg border border-slate-200 bg-white hover:border-blue-300 hover:shadow-sm transition-all group"
+                                    className="w-full text-left p-3 rounded-lg border border-a3sec-border bg-a3sec-surface hover:border-blue-300 hover:shadow-sm transition-all group"
                                   >
                                     <div className="flex items-start justify-between gap-2">
-                                      <span className="text-sm font-semibold text-slate-800 group-hover:text-blue-600 transition-colors leading-tight">
+                                      <span className="text-sm font-semibold text-white group-hover:text-brand-green transition-colors leading-tight">
                                         {rule.title}
                                       </span>
                                       {rule.level && (
@@ -305,7 +305,7 @@ const TechniqueDrawer: React.FC<{
               </div>
 
               {/* DETAIL VIEW */}
-              <div className={`absolute inset-0 bg-white transition-transform duration-300 ease-in-out ${selectedRule ? 'translate-x-0' : 'translate-x-full'}`}>
+              <div className={`absolute inset-0 bg-a3sec-surface transition-transform duration-300 ease-in-out ${selectedRule ? 'translate-x-0' : 'translate-x-full'}`}>
                 {selectedRule && (
                   <RuleDetailView
                     ruleId={selectedRule.id}
@@ -400,7 +400,7 @@ export const MitreMatrix: React.FC = () => {
   }, [activeProduct]);
 
   const getCellStyle = useCallback((techId: string, ruleCount: number): string => {
-    if (ruleCount === 0) return 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50';
+    if (ruleCount === 0) return 'bg-a3sec-surface border-a3sec-border text-slate-500 hover:bg-a3sec-deeper';
     if (!activeProduct || coveredTechIds === null) return 'bg-green-100 border-green-300 text-green-900 hover:bg-green-200';
     const covered = coveredTechIds.has(techId.toUpperCase());
     if (covered) return 'bg-blue-100 border-blue-400 text-blue-900 hover:bg-blue-200';
@@ -466,7 +466,7 @@ export const MitreMatrix: React.FC = () => {
     <div className="h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">MITRE ATT&amp;CK Matrix</h1>
+          <h1 className="text-2xl font-bold text-white">MITRE ATT&amp;CK Matrix</h1>
           <p className="text-sm text-slate-500">Enterprise v-{matrix.version}</p>
         </div>
         <div className="flex items-center gap-4 flex-wrap">
@@ -493,7 +493,7 @@ export const MitreMatrix: React.FC = () => {
                   }}
                   placeholder="Filtrar por producto..."
                   className={`pl-3 pr-8 py-1.5 text-xs rounded-lg border transition-colors w-48 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
-                    activeProduct ? 'border-blue-400 bg-blue-50 font-semibold text-blue-700' : 'border-slate-300 bg-white text-slate-700'
+                    activeProduct ? 'border-blue-400 bg-brand-green/10 font-semibold text-brand-green' : 'border-a3sec-muted bg-a3sec-surface text-slate-300'
                   }`}
                 />
                 <datalist id="mitre-products-list">
@@ -503,7 +503,7 @@ export const MitreMatrix: React.FC = () => {
                   <button
                     onClick={() => { setActiveProduct(''); setProductInput(''); }}
                     aria-label="Limpiar filtro"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-400 hover:text-blue-700"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-400 hover:text-brand-green"
                   >
                     <X size={12} />
                   </button>
@@ -522,12 +522,12 @@ export const MitreMatrix: React.FC = () => {
               <>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-blue-400 inline-block" /> Para {activeProduct}</span>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-300 inline-block" /> Otras reglas</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-slate-200 inline-block" /> Sin cobertura</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-a3sec-muted inline-block" /> Sin cobertura</span>
               </>
             ) : (
               <>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-green-400 inline-block" /> Cubierta</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-slate-200 inline-block" /> No cubierta</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-a3sec-muted inline-block" /> No cubierta</span>
               </>
             )}
           </div>
@@ -536,7 +536,7 @@ export const MitreMatrix: React.FC = () => {
             <button
               onClick={handleUpdate}
               disabled={updating}
-              className="flex items-center px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg text-sm transition-colors"
+              className="flex items-center px-3 py-1.5 bg-a3sec-muted hover:bg-slate-300 text-slate-300 rounded-lg text-sm transition-colors"
             >
               <RefreshCw size={14} className={`mr-2 ${updating ? 'animate-spin' : ''}`} />
               {updating ? 'Updating...' : 'Sync MITRE Data'}
@@ -545,13 +545,13 @@ export const MitreMatrix: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-x-auto border border-slate-300 rounded-lg bg-slate-50 shadow-inner custom-scrollbar">
+      <div className="flex-1 overflow-x-auto border border-a3sec-muted rounded-lg bg-a3sec-deeper shadow-inner custom-scrollbar">
         <div className="flex min-w-max">
           {matrix.tactics.map((tactic) => {
             const techniques = matrix.techniques_by_tactic[tactic.id] || [];
             return (
-              <div key={tactic.id} className="w-48 flex-shrink-0 border-r border-slate-300 last:border-r-0">
-                <div className="bg-slate-200 p-3 text-center border-b border-slate-300 sticky top-0 z-10 font-bold text-slate-800 text-sm h-16 flex items-center justify-center shadow-sm">
+              <div key={tactic.id} className="w-48 flex-shrink-0 border-r border-a3sec-muted last:border-r-0">
+                <div className="bg-a3sec-muted p-3 text-center border-b border-a3sec-muted sticky top-0 z-10 font-bold text-white text-sm h-16 flex items-center justify-center shadow-sm">
                   {tactic.name}
                 </div>
                 <div className="p-2 space-y-2">
@@ -564,7 +564,7 @@ export const MitreMatrix: React.FC = () => {
                         onClick={() => handleTechClick(tech)}
                         className={`w-full text-left p-2 text-xs border rounded cursor-pointer transition-all focus:outline-none
                           ${getCellStyle(tech.id, tech.rule_count)}
-                          ${isSelected ? 'ring-2 ring-blue-500 ring-offset-1 shadow-md' : 'hover:shadow-sm'}`}
+                          ${isSelected ? 'ring-2 ring-brand-green ring-offset-1 shadow-md' : 'hover:shadow-sm'}`}
                         aria-pressed={isSelected}
                         aria-label={`${tech.name} — ${tech.rule_count} rules`}
                       >

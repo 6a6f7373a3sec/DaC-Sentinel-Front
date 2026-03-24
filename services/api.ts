@@ -16,6 +16,79 @@ import {
   ExportEstimate
 } from '../types';
 
+// --- Phase B+C Types ---
+export interface GitRepoSource {
+  id: number;
+  name: string;
+  repo_url: string;
+  branch: string;
+  rules_subpath: string;
+  is_active: boolean;
+  last_sync_at: string | null;
+  last_sync_status: string | null;
+  last_commit_hash: string | null;
+  rule_count: number;
+  created_at: string;
+}
+
+export interface ClientProfile {
+  id: number;
+  name: string;
+  description: string | null;
+  filters: Record<string, any>;
+  is_active: boolean;
+  rule_count: number;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export interface ClientCoverage {
+  client_id: number;
+  client_name: string;
+  domain: string;
+  version: string;
+  total_techniques: number;
+  total_with_subtechniques: number;
+  covered_techniques: number;
+  coverage_percentage: number;
+  by_tactic: Record<string, { total: number; covered: number; percentage: number }>;
+  uncovered_count: number;
+}
+
+export interface ClientGaps {
+  client_id: number;
+  client_name: string;
+  total_gaps: number;
+  gaps_by_tactic: Record<string, {
+    id: string; name: string; tactics: string[]; url: string;
+    priority: 'high' | 'medium' | 'low';
+    covered_subtechniques: number; total_subtechniques: number;
+  }[]>;
+  priority_summary: { high: number; medium: number; low: number };
+}
+
+export interface ClientCompare {
+  client_id: number;
+  client_name: string;
+  client_coverage: number;
+  global_coverage: number;
+  delta: number;
+  only_in_global_count: number;
+  only_in_global: string[];
+  shared_techniques: number;
+  recommendation: string;
+}
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 class ApiService {
   private getHeaders() {
     const token = localStorage.getItem('access_token');
@@ -44,7 +117,7 @@ class ApiService {
         window.location.hash = '#/login';
       }
       const errorBody = await response.json().catch(() => ({}));
-      throw new Error(errorBody.detail || `HTTP Error ${response.status}`);
+      throw new ApiError(response.status, errorBody.detail || `HTTP Error ${response.status}`);
     }
 
     if (response.status === 204) {
@@ -83,6 +156,14 @@ class ApiService {
 
   async getMe(): Promise<User> {
     return this.request<User>('/auth/me');
+  }
+
+  // Dev-only: reset a user's password directly (backend must enable DAC_ALLOW_DEV_PASSWORD_RESET)
+  async devResetPassword(email: string, password: string): Promise<any> {
+    return this.request<any>('/auth/dev-reset', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
   }
 
   // Dashboard & Rules
@@ -395,6 +476,95 @@ class ApiService {
     return this.request<ImportResult>('/admin/import/sync', { method: 'POST' });
   }
 
+  // --- Phase A: Persistence ---
+  async rebuildFilesystem(): Promise<{ restored: number; total_in_db: number; errors: { path: string; error: string }[] }> {
+    return this.request('/admin/import/rebuild', { method: 'POST' });
+  }
+
+  // --- Phase B: Multi-Repo ---
+  async probeRepo(repo_url: string): Promise<{
+    accessible: boolean;
+    branches: string[];
+    default_branch: string | null;
+    error?: string;
+    already_registered: boolean;
+    existing_source_id: number | null;
+  }> {
+    return this.request('/admin/repos/probe', {
+      method: 'POST',
+      body: JSON.stringify({ repo_url }),
+    });
+  }
+
+  async listRepos(): Promise<{ items: GitRepoSource[]; total: number }> {
+    return this.request('/admin/repos');
+  }
+
+  async createRepo(data: { name: string; repo_url: string; branch: string; rules_subpath: string }): Promise<GitRepoSource> {
+    return this.request('/admin/repos', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getRepo(id: number): Promise<GitRepoSource> {
+    return this.request(`/admin/repos/${id}`);
+  }
+
+  async deleteRepo(id: number): Promise<void> {
+    return this.request(`/admin/repos/${id}`, { method: 'DELETE' });
+  }
+
+  async syncRepo(id: number): Promise<{ status: string; git_result?: string; index_stats: Record<string, any> }> {
+    return this.request(`/admin/repos/${id}/sync`, { method: 'POST' });
+  }
+
+  // --- Phase C: Client Profiles ---
+  async listClients(): Promise<{ items: ClientProfile[]; total: number }> {
+    return this.request('/clients');
+  }
+
+  async createClient(data: { name: string; description?: string; filters: Record<string, any> }): Promise<ClientProfile> {
+    return this.request('/clients', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getClient(id: number): Promise<ClientProfile> {
+    return this.request(`/clients/${id}`);
+  }
+
+  async updateClient(id: number, data: { name?: string; description?: string; filters?: Record<string, any>; is_active?: boolean }): Promise<ClientProfile> {
+    return this.request(`/clients/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteClient(id: number): Promise<void> {
+    return this.request(`/clients/${id}`, { method: 'DELETE' });
+  }
+
+  async getClientCoverage(id: number, domain = 'enterprise'): Promise<ClientCoverage> {
+    return this.request<ClientCoverage>(`/clients/${id}/coverage?domain=${domain}`);
+  }
+
+  async getClientRules(id: number, page = 1, pageSize = 20): Promise<{
+    client_id: number; client_name: string; total: number; page: number; page_size: number;
+    items: { id: number; path: string; title: string; level: string; status: string; product: string; category: string; attack_ids: string }[];
+  }> {
+    return this.request(`/clients/${id}/rules?page=${page}&page_size=${pageSize}`);
+  }
+
+  async getClientGaps(id: number, domain = 'enterprise'): Promise<ClientGaps> {
+    return this.request<ClientGaps>(`/clients/${id}/gaps?domain=${domain}`);
+  }
+
+  async getClientCompare(id: number, domain = 'enterprise'): Promise<ClientCompare> {
+    return this.request<ClientCompare>(`/clients/${id}/compare?domain=${domain}`);
+  }
+
   // Sigma Converter
   async getSigmaTargets(): Promise<{ name: string; description: string }[]> {
     return this.request('/sigma/targets');
@@ -419,6 +589,57 @@ class ApiService {
     html_escape?: boolean;
   }): Promise<{ result: string }> {
     return this.request('/sigma/convert', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // --- Rule Picker endpoints (SPEC-CONV-001) ---
+
+  async searchSigmaRules(params: {
+    q?: string;
+    page?: number;
+    page_size?: number;
+    level?: string;
+    product?: string;
+  }): Promise<{
+    items: {
+      id: number;
+      title: string;
+      level: string | null;
+      status: string | null;
+      logsource_product: string | null;
+      logsource_category: string | null;
+      tags: string[] | null;
+    }[];
+    total: number;
+    page: number;
+    page_size: number;
+  }> {
+    const q = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') q.append(k, String(v));
+    });
+    return this.request(`/sigma/rules/search?${q.toString()}`);
+  }
+
+  async getSigmaRuleYaml(ruleId: number): Promise<{
+    id: number;
+    title: string;
+    yaml_content: string;
+  }> {
+    return this.request(`/sigma/rules/${ruleId}/yaml`);
+  }
+
+  async convertSigmaRuleById(payload: {
+    rule_id: number;
+    target: string;
+    format?: string;
+    pipeline?: string[];
+    pipeline_yaml?: string;
+    html_escape?: boolean;
+  }): Promise<{ result: string }> {
+    return this.request('/sigma/convert-rule', {
       method: 'POST',
       body: JSON.stringify(payload),
     });

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { api } from '../services/api';
 import { GenerateRuleResponse, UserRole } from '../types';
-import { Send, FileCheck, GitBranch, RefreshCw, Copy, Check } from 'lucide-react';
+import { Send, FileCheck, GitBranch, RefreshCw, Copy, Check, AlertCircle, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export const RuleGenerator: React.FC = () => {
@@ -10,6 +10,7 @@ export const RuleGenerator: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GenerateRuleResponse | null>(null);
   const [copied, setCopied] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [proposalStatus, setProposalStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [prUrl, setPrUrl] = useState<string | null>(null);
 
@@ -30,6 +31,7 @@ export const RuleGenerator: React.FC = () => {
     if (!prompt.trim()) return;
     setLoading(true);
     setResult(null);
+    setGenError(null);
     setProposalStatus('idle');
     setSaveLocalStatus('idle');
     setSaveLocalMsg(null);
@@ -37,9 +39,9 @@ export const RuleGenerator: React.FC = () => {
       const data = await api.generateRule(prompt);
       setResult(data);
       setLocalPath((p) => (p?.trim() ? p : defaultLocalPath));
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Failed to generate rule. Please try again.');
+      setGenError(error?.message || 'Failed to generate rule. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -92,14 +94,14 @@ export const RuleGenerator: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="space-y-2">
-        <h1 className="text-2xl font-bold text-slate-900">Generardor de reglas con IA <span className="text-red-600">(Experimental)</span></h1>
+        <h1 className="text-2xl font-bold text-white">Generardor de reglas con IA <span className="text-red-600">(Experimental)</span></h1>
         <p className="text-slate-500">Describe la lógica de detección que necesitas en lenguaje natural y la IA generará una regla Sigma para ti.</p>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <label className="block text-sm font-medium text-slate-700 mb-2">Requerimientos de detección</label>
+      <div className="bg-a3sec-surface p-6 rounded-xl shadow-sm border border-a3sec-border">
+        <label className="block text-sm font-medium text-slate-300 mb-2">Requerimientos de detección</label>
         <textarea
-          className="w-full h-32 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+          className="w-full h-32 p-4 border border-a3sec-muted rounded-lg bg-a3sec-surface focus:ring-2 focus:ring-brand-green focus:border-transparent transition-all"
           placeholder="e.g., Detectar ejecución sospechosa de PowerShell con comandos codificados en base64 relacionados con el reconocimiento de red..."
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -108,7 +110,7 @@ export const RuleGenerator: React.FC = () => {
           <button
             onClick={handleGenerate}
             disabled={loading || !prompt.trim()}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center px-4 py-2 bg-brand-green text-a3sec-dark text-white rounded-lg hover:bg-brand-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {loading ? <RefreshCw className="animate-spin mr-2" size={18} /> : <Send className="mr-2" size={18} />}
             Generar regla
@@ -116,18 +118,31 @@ export const RuleGenerator: React.FC = () => {
         </div>
       </div>
 
+      {genError && (
+        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-xl animate-in fade-in slide-in-from-bottom-4 duration-300" role="alert">
+          <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={20} />
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-red-800 mb-1">Error al generar la regla</h4>
+            <p className="text-sm text-red-700 break-words font-mono">{genError}</p>
+          </div>
+          <button onClick={() => setGenError(null)} className="p-1 text-red-400 hover:text-red-700 shrink-0" aria-label="Cerrar error">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {result && (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="border-b border-slate-200 p-4 bg-slate-50 flex justify-between items-center">
+        <div className="bg-a3sec-surface rounded-xl shadow-sm border border-a3sec-border overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="border-b border-a3sec-border p-4 bg-a3sec-deeper flex justify-between items-center">
             <div className="flex items-center space-x-4">
-              <span className="text-sm font-semibold text-slate-700">Generated YAML</span>
+              <span className="text-sm font-semibold text-slate-300">Generated YAML</span>
               <span className={`text-xs px-2 py-1 rounded-full border ${
                 result.confidence > 0.8 ? 'bg-green-100 text-green-700 border-green-200' : 'bg-yellow-100 text-yellow-700 border-yellow-200'
               }`}>
                 Confidence: {Math.round(result.confidence * 100)}%
               </span>
             </div>
-            <button onClick={copyToClipboard} className="text-slate-500 hover:text-blue-600 transition-colors">
+            <button onClick={copyToClipboard} className="text-slate-500 hover:text-brand-green transition-colors">
               {copied ? <Check size={18} /> : <Copy size={18} />}
             </button>
           </div>
@@ -138,7 +153,7 @@ export const RuleGenerator: React.FC = () => {
             </pre>
           </div>
 
-          <div className="p-4 border-t border-slate-200 bg-white space-y-3">
+          <div className="p-4 border-t border-a3sec-border bg-a3sec-surface space-y-3">
             <div className="flex flex-col md:flex-row md:items-end gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
@@ -148,11 +163,11 @@ export const RuleGenerator: React.FC = () => {
                   value={localPath}
                   onChange={(e) => setLocalPath(e.target.value)}
                   placeholder="ai/mi_regla.yml"
-                  className="w-full p-2 border border-slate-300 rounded-lg text-sm font-mono bg-slate-50"
+                  className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface font-mono bg-a3sec-deeper"
                   disabled={!canSaveLocal}
                 />
                 <div className="mt-2 flex items-center gap-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <label className="flex items-center gap-2 text-sm text-slate-400">
                     <input
                       type="checkbox"
                       checked={overwrite}
@@ -184,14 +199,14 @@ export const RuleGenerator: React.FC = () => {
                   ? 'bg-green-50 text-green-800 border-green-200'
                   : saveLocalStatus === 'error'
                     ? 'bg-red-50 text-red-800 border-red-200'
-                    : 'bg-slate-50 text-slate-700 border-slate-200'
+                    : 'bg-a3sec-deeper text-slate-300 border-a3sec-border'
               }`}>
                 {saveLocalMsg}
               </div>
             )}
           </div>
 
-          <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center">
+          <div className="p-4 border-t border-a3sec-border bg-a3sec-deeper flex justify-between items-center">
             <div className="text-sm text-slate-500">
               Tokens used: {result.tokens_used}
             </div>
@@ -209,7 +224,7 @@ export const RuleGenerator: React.FC = () => {
               <button
                 onClick={handleCreateProposal}
                 disabled={proposalStatus === 'loading'}
-                className="flex items-center px-4 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                className="flex items-center px-4 py-2 bg-brand-green text-a3sec-dark rounded-lg hover:bg-a3sec-surface disabled:opacity-50"
               >
                 {proposalStatus === 'loading' ? (
                   <RefreshCw className="animate-spin mr-2" size={18} />
