@@ -323,7 +323,7 @@ const ClientFormModal: React.FC<{
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">Nivel mínimo</label>
               <select
-                className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface bg-a3sec-surface"
+                className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface"
                 value={minLevel} onChange={e => setMinLevel(e.target.value)}
               >
                 <option value="">Sin filtro de nivel</option>

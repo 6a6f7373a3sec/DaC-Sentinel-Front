@@ -115,7 +115,7 @@ const UsersTab: React.FC = () => {
             <label className="block text-sm font-medium text-slate-300 mb-1">Full Name</label>
             <input
               required
-              className="w-full p-2 border border-a3sec-muted rounded-lg"
+              className="w-full p-2 border border-a3sec-muted bg-a3sec-surface rounded-lg"
               value={currentUser.name || ''}
               onChange={e => setCurrentUser({ ...currentUser, name: e.target.value })}
             />
@@ -124,7 +124,7 @@ const UsersTab: React.FC = () => {
             <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
             <input
               required type="email"
-              className="w-full p-2 border border-a3sec-muted rounded-lg"
+              className="w-full p-2 border border-a3sec-muted bg-a3sec-surface rounded-lg"
               value={currentUser.email || ''}
               onChange={e => setCurrentUser({ ...currentUser, email: e.target.value })}
             />
@@ -134,7 +134,7 @@ const UsersTab: React.FC = () => {
               <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
               <input
                 required type="password"
-                className="w-full p-2 border border-a3sec-muted rounded-lg"
+                className="w-full p-2 border border-a3sec-muted bg-a3sec-surface rounded-lg"
                 value={currentUser.password || ''}
                 onChange={e => setCurrentUser({ ...currentUser, password: e.target.value })}
               />
@@ -560,7 +560,7 @@ const LocalRulesTab: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Path (relativo a <span className="font-mono">rules/local/</span>)</label>
             <input
-              className="w-full p-2 border border-a3sec-muted rounded-lg font-mono text-sm"
+              className="w-full p-2 border border-a3sec-muted bg-a3sec-surface rounded-lg font-mono text-sm"
               value={formPath}
               onChange={(e) => setFormPath(e.target.value)}
               disabled={mode === 'edit'}
@@ -871,7 +871,7 @@ const AddRepoModal: React.FC<{ onClose: () => void; onCreated: () => void }> = (
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Rama</label>
             <select
-              className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface bg-a3sec-surface"
+              className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface"
               value={branch}
               onChange={e => setBranch(e.target.value)}
             >
