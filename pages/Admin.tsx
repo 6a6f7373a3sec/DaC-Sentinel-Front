@@ -22,7 +22,11 @@ const UsersTab: React.FC = () => {
       if (isEditing && currentUser.id) {
         // Remove password if empty to avoid updating it
         const { password, ...data } = currentUser;
-        await api.updateUser(currentUser.id, data);
+        await api.updateUser(currentUser.id, {
+          name: currentUser.name,
+          is_active: currentUser.is_active,
+          roles: currentUser.roles,
+        });
       } else {
         if (!currentUser.email || !currentUser.password || !currentUser.name) return;
         await api.createUser({
@@ -109,30 +113,30 @@ const UsersTab: React.FC = () => {
         <form onSubmit={handleSave} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Full Name</label>
-            <input 
+            <input
               required
               className="w-full p-2 border border-a3sec-muted rounded-lg"
               value={currentUser.name || ''}
-              onChange={e => setCurrentUser({...currentUser, name: e.target.value})}
+              onChange={e => setCurrentUser({ ...currentUser, name: e.target.value })}
             />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Email</label>
-            <input 
+            <input
               required type="email"
               className="w-full p-2 border border-a3sec-muted rounded-lg"
               value={currentUser.email || ''}
-              onChange={e => setCurrentUser({...currentUser, email: e.target.value})}
+              onChange={e => setCurrentUser({ ...currentUser, email: e.target.value })}
             />
           </div>
           {!isEditing && (
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Password</label>
-              <input 
+              <input
                 required type="password"
                 className="w-full p-2 border border-a3sec-muted rounded-lg"
                 value={currentUser.password || ''}
-                onChange={e => setCurrentUser({...currentUser, password: e.target.value})}
+                onChange={e => setCurrentUser({ ...currentUser, password: e.target.value })}
               />
             </div>
           )}
@@ -140,7 +144,7 @@ const UsersTab: React.FC = () => {
             <label className="flex items-center space-x-2">
               <input type="checkbox"
                 checked={currentUser.is_active || false}
-                onChange={e => setCurrentUser({...currentUser, is_active: e.target.checked})}
+                onChange={e => setCurrentUser({ ...currentUser, is_active: e.target.checked })}
               />
               <span className="text-sm">Active</span>
             </label>
@@ -151,7 +155,7 @@ const UsersTab: React.FC = () => {
                   onChange={e => {
                     const roles = new Set(currentUser.roles || []);
                     e.target.checked ? roles.add(role) : roles.delete(role);
-                    setCurrentUser({...currentUser, roles: Array.from(roles)});
+                    setCurrentUser({ ...currentUser, roles: Array.from(roles) });
                   }}
                 />
                 <span className="text-sm">{role}</span>
@@ -267,8 +271,8 @@ const ImportTab: React.FC = () => {
         </div>
         <h3 className="font-bold text-lg mb-2">SigmaHQ Official</h3>
         <p className="text-slate-500 text-sm mb-6">Import the latest rules directly from the official SigmaHQ repository.</p>
-        <button 
-          onClick={handleSigmaImport} 
+        <button
+          onClick={handleSigmaImport}
           disabled={loading}
           className="w-full py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
         >
@@ -284,16 +288,16 @@ const ImportTab: React.FC = () => {
         <h3 className="font-bold text-lg mb-2">Git Repository</h3>
         <p className="text-slate-500 text-sm mb-4">Clone and import rules from a custom remote Git URL.</p>
         <form onSubmit={handleGitImport} className="space-y-3">
-          <input 
-            type="url" 
+          <input
+            type="url"
             placeholder="https://github.com/org/repo.git"
             className="w-full p-2 border border-a3sec-muted rounded text-sm"
             value={gitUrl}
             onChange={e => setGitUrl(e.target.value)}
             required
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
             className="w-full py-2 bg-slate-800 text-white rounded-lg hover:bg-slate-900 disabled:opacity-50"
           >
@@ -310,15 +314,15 @@ const ImportTab: React.FC = () => {
         <h3 className="font-bold text-lg mb-2">ZIP Archive</h3>
         <p className="text-slate-500 text-sm mb-4">Upload a ZIP file containing YAML rule files.</p>
         <form onSubmit={handleZipImport} className="space-y-3">
-          <input 
-            type="file" 
+          <input
+            type="file"
             accept=".zip"
             onChange={e => setFile(e.target.files?.[0] || null)}
             className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-brand-green/10 file:text-brand-green hover:file:bg-blue-100"
             required
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
             className="w-full py-2 bg-brand-green text-a3sec-dark text-white rounded-lg hover:bg-brand-green/90 disabled:opacity-50"
           >
@@ -329,16 +333,16 @@ const ImportTab: React.FC = () => {
 
       {result && (
         <div className="md:col-span-3 bg-green-50 border border-green-200 rounded-xl p-4 flex items-start">
-           <RefreshCw className="text-green-600 mt-1 mr-3" size={20} />
-           <div>
-             <h4 className="font-bold text-green-800">Import Completed</h4>
-             <p className="text-green-700 text-sm mt-1">{result.message || result.status}</p>
-             {result.index_stats && (
-               <div className="mt-2 text-xs text-green-800 font-mono">
-                 Rules: {result.index_stats.total_rules} | Errors: {result.index_stats.error_count}
-               </div>
-             )}
-           </div>
+          <RefreshCw className="text-green-600 mt-1 mr-3" size={20} />
+          <div>
+            <h4 className="font-bold text-green-800">Import Completed</h4>
+            <p className="text-green-700 text-sm mt-1">{result.message || result.status}</p>
+            {result.index_stats && (
+              <div className="mt-2 text-xs text-green-800 font-mono">
+                Rules: {result.index_stats.total_rules} | Errors: {result.index_stats.error_count}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -934,7 +938,7 @@ const AddRepoModal: React.FC<{ onClose: () => void; onCreated: () => void }> = (
 // --- INDEXER TAB ---
 const IndexerTab: React.FC = () => {
   const [stats, setStats] = useState<IndexStats | null>(null);
-  const [errors, setErrors] = useState<{errors: any[], total: number}>({errors: [], total: 0}); // preview (API recorta por limit)
+  const [errors, setErrors] = useState<{ errors: any[], total: number }>({ errors: [], total: 0 }); // preview (API recorta por limit)
   const [indexing, setIndexing] = useState(false);
   const [downloadingErrors, setDownloadingErrors] = useState(false);
   const [errorsExportFmt, setErrorsExportFmt] = useState<'json' | 'csv'>('json');
@@ -960,7 +964,7 @@ const IndexerTab: React.FC = () => {
       } else {
         setErrors({ errors: [], total: 0 });
       }
-    } catch(err) { console.error(err); }
+    } catch (err) { console.error(err); }
   };
 
   useEffect(() => { loadStats(); }, []);
@@ -1002,34 +1006,33 @@ const IndexerTab: React.FC = () => {
         <h3 className="text-lg font-bold mb-4">Index Health & Stats</h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="p-4 bg-a3sec-deeper rounded-lg border border-a3sec-border">
-             <div className="text-xs text-slate-500 uppercase font-semibold">Total de reglas</div>
-             <div className="text-2xl font-bold text-white">{stats.total_rules}</div>
+            <div className="text-xs text-slate-500 uppercase font-semibold">Total de reglas</div>
+            <div className="text-2xl font-bold text-white">{stats.total_rules}</div>
           </div>
           <div className={`p-4 rounded-lg border ${stats.error_count > 0 ? 'bg-red-50 border-red-100' : 'bg-green-50 border-green-100'}`}>
-             <div className="text-xs opacity-75 uppercase font-semibold">Errors</div>
-             <div className={`text-2xl font-bold ${stats.error_count > 0 ? 'text-red-600' : 'text-green-600'}`}>{stats.error_count}</div>
+            <div className="text-xs opacity-75 uppercase font-semibold">Errors</div>
+            <div className={`text-2xl font-bold ${stats.error_count > 0 ? 'text-red-600' : 'text-green-600'}`}>{stats.error_count}</div>
           </div>
           <div className="p-4 bg-a3sec-deeper rounded-lg border border-a3sec-border">
-             <div className="text-xs text-slate-500 uppercase font-semibold">Version</div>
-             <div className="text-sm font-mono mt-2 font-medium">{stats.index_version.substring(0, 8)}...</div>
+            <div className="text-xs text-slate-500 uppercase font-semibold">Version</div>
+            <div className="text-sm font-mono mt-2 font-medium">{stats.index_version.substring(0, 8)}...</div>
           </div>
           <div className="p-4 bg-a3sec-deeper rounded-lg border border-a3sec-border">
-             <div className="text-xs text-slate-500 uppercase font-semibold">Repo Source</div>
-             <div className={`text-sm font-bold mt-1 ${stats.repo_exists ? 'text-green-600' : 'text-red-600'}`}>
-               {stats.repo_exists ? 'Linked' : 'Not Linked'}
-             </div>
+            <div className="text-xs text-slate-500 uppercase font-semibold">Repo Source</div>
+            <div className={`text-sm font-bold mt-1 ${stats.repo_exists ? 'text-green-600' : 'text-red-600'}`}>
+              {stats.repo_exists ? 'Linked' : 'Not Linked'}
+            </div>
           </div>
-          <div className={`p-4 rounded-lg border ${
-            (stats as any).rules_with_yaml === stats.total_rules ? 'bg-green-50 border-green-100' :
-            (stats as any).rules_with_yaml > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100'
-          }`}>
-             <div className="text-xs uppercase font-semibold opacity-75">YAML en DB</div>
-             <div className="text-lg font-bold mt-1">
-               {((stats as any).rules_with_yaml ?? '—')} <span className="text-xs font-normal text-slate-500">/ {stats.total_rules}</span>
-             </div>
+          <div className={`p-4 rounded-lg border ${(stats as any).rules_with_yaml === stats.total_rules ? 'bg-green-50 border-green-100' :
+              (stats as any).rules_with_yaml > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-red-50 border-red-100'
+            }`}>
+            <div className="text-xs uppercase font-semibold opacity-75">YAML en DB</div>
+            <div className="text-lg font-bold mt-1">
+              {((stats as any).rules_with_yaml ?? '—')} <span className="text-xs font-normal text-slate-500">/ {stats.total_rules}</span>
+            </div>
           </div>
         </div>
-        
+
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 border-t border-a3sec-border pt-6">
           <div className="text-sm text-slate-400">
             <span className="font-semibold">Scheduler:</span>{' '}
@@ -1063,7 +1066,7 @@ const IndexerTab: React.FC = () => {
               {triggeringJob === 'mitre_update_job' ? 'Triggering...' : 'Trigger mitre_update_job'}
             </button>
 
-            <button 
+            <button
               onClick={handleReindex}
               disabled={indexing || !!triggeringJob}
               className="flex items-center px-4 py-2 bg-brand-green text-a3sec-dark text-white rounded-lg hover:bg-brand-green/90 disabled:opacity-50 transition-colors"
@@ -1160,7 +1163,7 @@ export const AdminPanel: React.FC = () => {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-white">System Administration</h1>
-      
+
       <div className="flex space-x-1 bg-a3sec-muted p-1 rounded-lg w-fit">
         <button
           onClick={() => setActiveTab('users')}
