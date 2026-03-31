@@ -110,6 +110,13 @@ export interface MitreTechnique {
   url: string;
 }
 
+/** Respuesta del endpoint filtrado por producto */
+export interface AttackTechniqueRulesResponse extends SearchResponse {
+  technique_id: string;
+  product_filter: string | null;
+  total_for_technique: number; // rule_count total SIN filtro de producto
+}
+
 export interface IndexStats {
   total_rules: number;
   index_version: string;

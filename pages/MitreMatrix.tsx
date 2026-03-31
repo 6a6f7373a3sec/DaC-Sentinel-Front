@@ -11,6 +11,10 @@ interface PanelData {
   techDetail: any | null;
   rules: any[];
   loadingRules: boolean;
+  /** Producto que estaba activo al abrir el drawer (puede diferir del filtro actual) */
+  productFilter: string;
+  /** total retornado por el servidor para ese producto (null = no filtrado) */
+  rulesTotalForProduct: number | null;
 }
 
 const LEVEL_COLOR: Record<string, string> = {
@@ -239,7 +243,9 @@ const TechniqueDrawer: React.FC<{
 
                   <div>
                     {(() => {
-                      const filtered = activeProduct
+                      // Si el servidor ya filtró por producto, no re-filtrar en cliente
+                      const serverFiltered = !!data.productFilter;
+                      const filtered = (activeProduct && !serverFiltered)
                         ? data.rules.filter((r: any) =>
                             (r.logsource_product ?? '').toLowerCase() === activeProduct.toLowerCase()
                           )
@@ -252,9 +258,16 @@ const TechniqueDrawer: React.FC<{
                               <FileText size={13} /> Reglas asociadas
                             </h3>
                             {activeProduct && !data.loadingRules && (
-                              <span className="text-[10px] font-semibold bg-brand-green/10 text-brand-green border border-blue-100 px-2 py-0.5 rounded-full">
-                                {filtered.length} / {data.rules.length} para {activeProduct}
-                              </span>
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span className="text-[10px] font-semibold bg-brand-green/10 text-brand-green border border-blue-100 px-2 py-0.5 rounded-full">
+                                  {data.rulesTotalForProduct ?? filtered.length} / {data.tech.rule_count} para {data.productFilter || activeProduct}
+                                </span>
+                                {data.rulesTotalForProduct !== null && data.rulesTotalForProduct > data.rules.length && (
+                                  <span className="text-[9px] text-amber-500 font-medium">
+                                    mostrando {data.rules.length} de {data.rulesTotalForProduct}
+                                  </span>
+                                )}
+                              </div>
                             )}
                           </div>
 
@@ -431,26 +444,37 @@ export const MitreMatrix: React.FC = () => {
     }
   };
 
-  const handleTechClick = useCallback(async (tech: { id: string; name: string; rule_count: number }) => {
+  const handleTechClick = useCallback(async (
+    tech: { id: string; name: string; rule_count: number },
+  ) => {
+    // Capturar activeProduct en el momento del click
+    const productAtClick = activeProduct;
     setSelectedId(tech.id);
-    setPanelData({ tech, techDetail: null, rules: [], loadingRules: true });
+    setPanelData({
+      tech, techDetail: null, rules: [], loadingRules: true,
+      productFilter: productAtClick, rulesTotalForProduct: null,
+    });
 
     try {
       const [techDetail, rulesResp] = await Promise.allSettled([
         api.getMitreTechnique(tech.id),
-        api.getRulesByAttackTechnique(tech.id, 1, 50),
+        api.getRulesByAttackTechnique(tech.id, 1, 50, productAtClick || undefined),
       ]);
+
+      const rulesData = rulesResp.status === 'fulfilled' ? rulesResp.value : null;
 
       setPanelData({
         tech,
         techDetail: techDetail.status === 'fulfilled' ? techDetail.value : null,
-        rules: rulesResp.status === 'fulfilled' ? (rulesResp.value?.rules ?? []) : [],
+        rules: rulesData?.rules ?? [],
         loadingRules: false,
+        productFilter: productAtClick,
+        rulesTotalForProduct: productAtClick ? (rulesData?.total ?? null) : null,
       });
     } catch {
       setPanelData(prev => prev ? { ...prev, loadingRules: false } : null);
     }
-  }, []);
+  }, [activeProduct]);
 
   const handleClose = useCallback(() => {
     setSelectedId(null);

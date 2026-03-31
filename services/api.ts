@@ -189,9 +189,15 @@ class ApiService {
     return this.request<RuleDetail>(`/dashboard/rules/${ruleId}`);
   }
 
-  async getRulesByAttackTechnique(technique_id: string, page = 1, page_size = 20): Promise<SearchResponse> {
-    const q = new URLSearchParams({ page: String(page), page_size: String(page_size) }).toString();
-    return this.request<SearchResponse>(`/dashboard/attack/${encodeURIComponent(technique_id)}?${q}`);
+  async getRulesByAttackTechnique(
+    technique_id: string,
+    page = 1,
+    page_size = 50,
+    product?: string,
+  ): Promise<SearchResponse> {
+    const q = new URLSearchParams({ page: String(page), page_size: String(page_size) });
+    if (product) q.set('product', product);
+    return this.request<SearchResponse>(`/dashboard/attack/${encodeURIComponent(technique_id)}?${q.toString()}`);
   }
 
   // Export
