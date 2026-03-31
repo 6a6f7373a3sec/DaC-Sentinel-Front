@@ -361,9 +361,7 @@ export const MitreMatrix: React.FC = () => {
         rawTags.forEach((tag: string) => {
           const match = tag.match(techPattern);
           if (match) {
-            const full = match[0].toUpperCase();
-            ids.add(full);
-            ids.add(full.split('.')[0]);
+            ids.add(match[0].toUpperCase());
           }
         });
       });
