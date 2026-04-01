@@ -49,8 +49,39 @@ const LEVEL_BADGE: Record<string, string> = {
   low:      'bg-brand-green/10 text-brand-green border-brand-green/20',
 };
 
+const SIGMA_COMPAT_HINTS: { pattern: RegExp; hint: string }[] = [
+  {
+    pattern: /SigmaConditionError|unexpected.*pipe|\|\s*(filter|selection)/i,
+    hint: '⚠️ pySigma ya no soporta "|" en condiciones. Reemplaza "selection | filter" por "selection and not filter".',
+  },
+  {
+    pattern: /SigmaFeatureNotSupportedByBackendError/i,
+    hint: '⚠️ Esta funcionalidad no está soportada por el backend seleccionado. Prueba con otro target o formato.',
+  },
+  {
+    pattern: /aggregation|count\(\)|sum\(\)/i,
+    hint: '⚠️ Las expresiones de agregación pueden requerir pipelines específicos o no estar soportadas en este backend.',
+  },
+  {
+    pattern: /SigmaParseError|SigmaDetectionError/i,
+    hint: '⚠️ Error al parsear la regla. Verifica que el YAML sea válido y compatible con pySigma (sigma-cli >= 1.0).',
+  },
+  {
+    pattern: /pipeline|transformation/i,
+    hint: '⚠️ Error en el pipeline. El formato de pipelines pySigma usa "name:", "transformations:" — diferente al antiguo sigma-cli.',
+  },
+];
+
+function getCompatHint(message: string): string | null {
+  return SIGMA_COMPAT_HINTS.find(h => h.pattern.test(message))?.hint ?? null;
+}
+
 function parseErrorType(detail: string): ConvertError {
-  const types = ['YamlParseError', 'UnknownTargetError', 'UnknownPipelineError', 'ConversionError'];
+  const types = [
+    'YamlParseError', 'UnknownTargetError', 'UnknownPipelineError', 'ConversionError',
+    'SigmaConditionError', 'SigmaDetectionError', 'SigmaParseError',
+    'SigmaFeatureNotSupportedByBackendError', 'SigmaTransformationError',
+  ];
   const found = types.find(t => detail.includes(t));
   return { type: found ?? 'Error', message: detail };
 }
@@ -487,13 +518,13 @@ export const SigmaConverter: React.FC = () => {
             {/* Custom pipeline YAML */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">
-                Pipeline custom (YAML) <span className="text-slate-400 font-normal">— opcional</span>
+                Pipeline custom (YAML) <span className="text-slate-400 font-normal">— opcional, formato pySigma</span>
               </label>
               <textarea
                 rows={3}
                 value={pipelineYaml}
                 onChange={e => setPipelineYaml(e.target.value)}
-                placeholder="Pega tu pipeline YAML aquí (múltiples separados por ---)"
+                placeholder={`name: mi_pipeline\ntransformations:\n  - id: add_index\n    type: field_name_mapping\n    mapping:\n      CommandLine: command_line`}
                 className="w-full p-2.5 border border-a3sec-muted rounded-lg text-xs font-mono bg-a3sec-deeper focus:outline-none focus:ring-2 focus:ring-brand-green resize-none"
               />
             </div>
@@ -626,7 +657,7 @@ export const SigmaConverter: React.FC = () => {
 
             <div className="flex-1 relative overflow-auto">
               {error ? (
-                <div className="p-5">
+                <div className="p-5 space-y-3">
                   <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
                     <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
                     <div>
@@ -634,6 +665,12 @@ export const SigmaConverter: React.FC = () => {
                       <p className="text-sm text-red-800 font-mono break-all">{error.message}</p>
                     </div>
                   </div>
+                  {getCompatHint(error.message) && (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                      <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                      <span>{getCompatHint(error.message)}</span>
+                    </div>
+                  )}
                 </div>
               ) : result ? (
                 <pre className="p-4 text-xs font-mono text-green-400 bg-slate-900 h-full overflow-auto leading-relaxed whitespace-pre-wrap">

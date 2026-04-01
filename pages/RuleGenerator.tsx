@@ -23,9 +23,23 @@ export const RuleGenerator: React.FC = () => {
   const [saveLocalMsg, setSaveLocalMsg] = useState<string | null>(null);
 
   const defaultLocalPath = useMemo(() => {
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    // Avoid T/Z/colons that some backends reject in file paths
+    const ts = new Date().toISOString()
+      .replace('T', '_')
+      .replace('Z', '')
+      .replace(/[:.]/g, '-');
     return `ai/generated_${ts}.yml`;
   }, []);
+
+  /** Auto-fix YAML titles with unquoted colons (common in AI-generated rules) */
+  const sanitizeYamlTitle = (yaml: string): string =>
+    yaml.replace(/^(title:\s*)(.+)$/m, (_, prefix, val) => {
+      const trimmed = val.trim();
+      if (trimmed.includes(':') && !/^['"]/.test(trimmed)) {
+        return `${prefix}"${trimmed.replace(/"/g, '\\"')}"`;
+      }
+      return `${prefix}${trimmed}`;
+    });
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -80,12 +94,23 @@ export const RuleGenerator: React.FC = () => {
     setSaveLocalStatus('idle');
     setSaveLocalMsg(null);
     try {
-      const resp = await api.createLocalRule(localPath.trim(), result.yaml_code, overwrite, true);
+      const fixedYaml = sanitizeYamlTitle(result.yaml_code);
+      const titleFixed = fixedYaml !== result.yaml_code;
+      const resp = await api.createLocalRule(localPath.trim(), fixedYaml, overwrite, true);
       setSaveLocalStatus('success');
-      setSaveLocalMsg(resp?.message || 'Regla guardada. Se indexará automáticamente.');
+      setSaveLocalMsg(
+        (resp?.message || 'Regla guardada. Se indexará automáticamente.') +
+        (titleFixed ? ' (El campo "title" fue entrecomillado automáticamente para compatibilidad YAML.)' : '')
+      );
     } catch (e: any) {
       setSaveLocalStatus('error');
-      setSaveLocalMsg(e?.message || 'No se pudo guardar la regla.');
+      const raw = e?.message || '';
+      const isFormatErr = /title|format|invalid|yaml|422/i.test(raw);
+      setSaveLocalMsg(
+        isFormatErr
+          ? `Error de formato en el YAML: ${raw}. Revisa el campo "title" — no debe contener ":" sin comillas.`
+          : raw || 'No se pudo guardar la regla.',
+      );
     } finally {
       setSavingLocal(false);
     }

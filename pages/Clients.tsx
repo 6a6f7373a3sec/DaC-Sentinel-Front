@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { api, resolveRuleStatus } from '../services/api';
 import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource, RuleOverride } from '../services/api';
-import { FilterOptions } from '../types';
+import { FilterOptions, MitreMatrixResponse } from '../types';
 import {
   Building2, Plus, Edit2, Trash2, Shield, BarChart3, AlertTriangle,
   GitCompare, Loader2, XCircle, ExternalLink, X, ChevronDown, ChevronRight,
-  List, Filter, Search, Save, MessageSquare, ChevronLeft, Undo2
+  List, Filter, Search, Save, MessageSquare, ChevronLeft, Undo2,
+  LayoutGrid, ImageIcon, Upload,
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { COLORS } from '../constants';
@@ -19,11 +20,11 @@ export interface ProductStatusEntry {
 }
 
 const SERVICE_STATUS_OPTIONS: { value: ServiceStatus; label: string; dot: string }[] = [
-  { value: 'implemented',     label: 'Implementado',     dot: 'bg-green-500' },
-  { value: 'not_implemented', label: 'No implementado',  dot: 'bg-red-500' },
-  { value: 'na',              label: 'N/A',              dot: 'bg-slate-400' },
-  { value: 'planned',         label: 'Planificado',      dot: 'bg-blue-500' },
-  { value: 'in_progress',     label: 'En progreso',      dot: 'bg-yellow-500' },
+  { value: 'implemented', label: 'Implementado', dot: 'bg-green-500' },
+  { value: 'not_implemented', label: 'No implementado', dot: 'bg-red-500' },
+  { value: 'na', label: 'N/A', dot: 'bg-slate-400' },
+  { value: 'planned', label: 'Planificado', dot: 'bg-blue-500' },
+  { value: 'in_progress', label: 'En progreso', dot: 'bg-yellow-500' },
 ];
 
 const STATUS_LABEL: Record<ServiceStatus, string> = Object.fromEntries(
@@ -69,6 +70,7 @@ export const Clients: React.FC = () => {
   const [rulesModal, setRulesModal] = useState<ClientProfile | null>(null);
   const [gapsModal, setGapsModal] = useState<ClientProfile | null>(null);
   const [compareModal, setCompareModal] = useState<ClientProfile | null>(null);
+  const [mitreMatrixModal, setMitreMatrixModal] = useState<ClientProfile | null>(null);
 
   const loadClients = useCallback(async () => {
     try {
@@ -127,37 +129,58 @@ export const Clients: React.FC = () => {
           {clients.map(client => (
             <div key={client.id} className="bg-a3sec-surface rounded-xl shadow-sm border border-a3sec-border p-5 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="text-lg font-bold text-white">{client.name}</h3>
-                    {!client.is_active && (
-                      <span className="text-xs bg-a3sec-dark text-slate-500 px-2 py-0.5 rounded-full">Inactivo</span>
-                    )}
-                  </div>
-                  {client.description && <p className="text-sm text-slate-500 mb-2">{client.description}</p>}
-                  {/* Product status badges */}
-                  {client.filters.product_status && Object.keys(client.filters.product_status).length > 0 ? (
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {Object.entries(client.filters.product_status as Record<string, ProductStatusEntry>).map(([p, e]) => {
-                        const opt = SERVICE_STATUS_OPTIONS.find(o => o.value === e.status);
-                        const svcCount = Object.keys(e.services || {}).length;
-                        return (
-                          <span key={p} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 bg-a3sec-deeper border border-a3sec-border rounded-full">
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${opt?.dot || 'bg-slate-400'}`} />
-                            <span className="text-slate-300 font-medium">{p}</span>
-                            {svcCount > 0 && <span className="text-slate-500 text-[10px]">{svcCount} svc</span>}
-                          </span>
-                        );
-                      })}
-                    </div>
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  {client.filters?.logo_url ? (
+                    <img
+                      src={client.filters.logo_url}
+                      alt={`Logo ${client.name}`}
+                      className="w-10 h-10 rounded-lg object-cover shrink-0 border border-a3sec-border"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
                   ) : (
-                    <p className="text-xs text-slate-500 mb-2">{filterSummary(client.filters)}</p>
+                    <div className="w-10 h-10 rounded-lg bg-a3sec-deeper border border-a3sec-border flex items-center justify-center shrink-0">
+                      <Building2 size={18} className="text-slate-500" />
+                    </div>
                   )}
-                  <div className="flex items-center gap-4 mt-2 text-sm">
-                    <span className="font-semibold text-slate-300">{client.rule_count.toLocaleString()} reglas</span>
-                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="text-lg font-bold text-white">{client.name}</h3>
+                      {!client.is_active && (
+                        <span className="text-xs bg-a3sec-dark text-slate-500 px-2 py-0.5 rounded-full">Inactivo</span>
+                      )}
+                    </div>
+                    {client.description && <p className="text-sm text-slate-500 mb-2">{client.description}</p>}
+                    {/* Product status badges */}
+                    {client.filters.product_status && Object.keys(client.filters.product_status).length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {Object.entries(client.filters.product_status as Record<string, ProductStatusEntry>).map(([p, e]) => {
+                          const opt = SERVICE_STATUS_OPTIONS.find(o => o.value === e.status);
+                          const svcCount = Object.keys(e.services || {}).length;
+                          return (
+                            <span key={p} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 bg-a3sec-deeper border border-a3sec-border rounded-full">
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${opt?.dot || 'bg-slate-400'}`} />
+                              <span className="text-slate-300 font-medium">{p}</span>
+                              {svcCount > 0 && <span className="text-slate-500 text-[10px]">{svcCount} svc</span>}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 mb-2">{filterSummary(client.filters)}</p>
+                    )}
+                    <div className="flex items-center gap-4 mt-2 text-sm">
+                      <span className="font-semibold text-slate-300">{client.rule_count.toLocaleString()} reglas</span>
+                    </div>
+                  </div>{/* close logo+info wrapper */}
                 </div>
                 <div className="flex flex-wrap gap-2 shrink-0">
+                  <button
+                    onClick={() => setMitreMatrixModal(client)}
+                    className="px-3 py-1.5 text-xs font-medium border border-brand-green/40 text-brand-green rounded-lg hover:bg-brand-green/10 flex items-center gap-1"
+                    aria-label={`Matriz MITRE de ${client.name}`}
+                  >
+                    <LayoutGrid size={14} /> Matriz MITRE
+                  </button>
                   <button
                     onClick={() => setRulesModal(client)}
                     className="px-3 py-1.5 text-xs font-medium border border-brand-green/40 text-brand-green rounded-lg hover:bg-brand-green/10 flex items-center gap-1"
@@ -226,6 +249,9 @@ export const Clients: React.FC = () => {
       )}
       {compareModal && (
         <CompareModal client={compareModal} onClose={() => setCompareModal(null)} />
+      )}
+      {mitreMatrixModal && (
+        <ClientMitreModal client={mitreMatrixModal} onClose={() => setMitreMatrixModal(null)} />
       )}
     </div>
   );
@@ -440,6 +466,9 @@ const ClientFormModal: React.FC<{
 }> = ({ editing, onClose, onSaved }) => {
   const [name, setName] = useState(editing?.name || '');
   const [description, setDescription] = useState(editing?.description || '');
+  const [logoUrl, setLogoUrl] = useState<string>(editing?.filters?.logo_url || '');
+  const [logoPreviewError, setLogoPreviewError] = useState(false);
+  const logoFileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -459,8 +488,8 @@ const ClientFormModal: React.FC<{
   const [repos, setRepos] = useState<GitRepoSource[]>([]);
 
   useEffect(() => {
-    api.getFilters().then(setFilterOptions).catch(() => {});
-    api.listRepos().then(r => setRepos(r.items)).catch(() => {});
+    api.getFilters().then(setFilterOptions).catch(() => { });
+    api.listRepos().then(r => setRepos(r.items)).catch(() => { });
   }, []);
 
   const availableProducts = filterOptions?.products || [];
@@ -481,6 +510,7 @@ const ClientFormModal: React.FC<{
     if (minLevel) filters.min_level = minLevel;
     if (statuses.length) filters.statuses = statuses;
     if (repoSourceIds.length) filters.repo_source_ids = repoSourceIds;
+    if (logoUrl.trim()) filters.logo_url = logoUrl.trim();
 
     try {
       if (editing) {
@@ -530,6 +560,75 @@ const ClientFormModal: React.FC<{
               placeholder="Entorno enterprise con Windows + Azure"
             />
           </div>
+        </div>
+
+        {/* Logo */}
+        <div>
+          <label className="block text-sm font-medium text-slate-300 mb-1">Logo del cliente (opcional)</label>
+          <div className="flex items-center gap-3">
+            {/* Preview */}
+            <div className="w-12 h-12 rounded-lg border border-a3sec-border bg-a3sec-deeper flex items-center justify-center shrink-0 overflow-hidden">
+              {logoUrl && !logoPreviewError ? (
+                <img
+                  src={logoUrl}
+                  alt="Preview logo"
+                  className="w-full h-full object-cover"
+                  onError={() => setLogoPreviewError(true)}
+                />
+              ) : (
+                <ImageIcon size={20} className="text-slate-500" />
+              )}
+            </div>
+            <div className="flex-1 space-y-1.5">
+              <input
+                className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface text-slate-300 placeholder:text-slate-600"
+                value={logoUrl}
+                onChange={e => { setLogoUrl(e.target.value); setLogoPreviewError(false); }}
+                placeholder="https://ejemplo.com/logo.png"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => logoFileRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-brand-green transition-colors px-2 py-1 border border-a3sec-muted rounded-lg hover:border-brand-green/40"
+                >
+                  <Upload size={12} /> Subir imagen
+                </button>
+                {logoUrl && (
+                  <button
+                    type="button"
+                    onClick={() => { setLogoUrl(''); setLogoPreviewError(false); }}
+                    className="text-xs text-slate-500 hover:text-red-400 transition-colors"
+                  >
+                    Quitar
+                  </button>
+                )}
+                <span className="text-[10px] text-slate-600">JPG/PNG · max ~200KB para base64</span>
+              </div>
+            </div>
+          </div>
+          <input
+            ref={logoFileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            aria-hidden="true"
+            onChange={e => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              if (file.size > 200 * 1024) {
+                alert('La imagen supera 200KB. Usa una URL externa en su lugar.');
+                return;
+              }
+              const reader = new FileReader();
+              reader.onload = ev => {
+                setLogoUrl(ev.target?.result as string);
+                setLogoPreviewError(false);
+              };
+              reader.readAsDataURL(file);
+              e.target.value = '';
+            }}
+          />
         </div>
 
         {/* Separator */}
@@ -721,11 +820,10 @@ const CoverageModal: React.FC<{ client: ClientProfile; onClose: () => void }> = 
               <button
                 key={key}
                 onClick={() => setTab(key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  tab === key
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${tab === key
                     ? 'bg-a3sec-surface text-white shadow-sm'
                     : 'text-slate-500 hover:text-slate-300'
-                }`}
+                  }`}
               >
                 {label}
               </button>
@@ -761,24 +859,24 @@ const CoverageModal: React.FC<{ client: ClientProfile; onClose: () => void }> = 
                   {Object.entries(data.by_tactic)
                     .sort((a: [string, any], b: [string, any]) => (b[1].percentage || 0) - (a[1].percentage || 0))
                     .map(([tactic, info]: [string, any]) => (
-                    <div key={tactic} className="flex items-center gap-3">
-                      <div className="w-40 text-xs text-slate-400 truncate font-medium" title={tactic}>
-                        {tactic.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      <div key={tactic} className="flex items-center gap-3">
+                        <div className="w-40 text-xs text-slate-400 truncate font-medium" title={tactic}>
+                          {tactic.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                        </div>
+                        <div className="flex-1 bg-a3sec-dark rounded-full h-5 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${Math.max(info.percentage || 0, 1)}%`,
+                              backgroundColor: (info.percentage || 0) > 50 ? COLORS.success : (info.percentage || 0) > 25 ? COLORS.warning : COLORS.danger,
+                            }}
+                          />
+                        </div>
+                        <div className="w-20 text-right text-xs font-semibold text-slate-400">
+                          {(info.percentage || 0).toFixed(0)}% <span className="font-normal">({info.covered}/{info.total})</span>
+                        </div>
                       </div>
-                      <div className="flex-1 bg-a3sec-dark rounded-full h-5 overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${Math.max(info.percentage || 0, 1)}%`,
-                            backgroundColor: (info.percentage || 0) > 50 ? COLORS.success : (info.percentage || 0) > 25 ? COLORS.warning : COLORS.danger,
-                          }}
-                        />
-                      </div>
-                      <div className="w-20 text-right text-xs font-semibold text-slate-400">
-                        {(info.percentage || 0).toFixed(0)}% <span className="font-normal">({info.covered}/{info.total})</span>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
             </>
@@ -887,7 +985,6 @@ function computeGlobalStats(
   statsByService: Record<string, number>,
   statsByProduct: Record<string, number>,
   productStatus: Record<string, ProductStatusEntry>,
-  overrideCount: number,
 ): Record<ServiceStatus, number> {
   const result: Record<ServiceStatus, number> = {
     implemented: 0, not_implemented: 0, na: 0, planned: 0, in_progress: 0,
@@ -941,8 +1038,8 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
   const [productFilter, setProductFilter] = useState('');
   const [activePage, setActivePage] = useState(1);
 
-  // Global stats
-  const [globalStats, setGlobalStats] = useState<Record<ServiceStatus, number> | null>(null);
+  // Raw stats from API (source of truth for totals)
+  const [rawStats, setRawStats] = useState<{ total: number; by_service: Record<string,number>; by_product: Record<string,number> } | null>(null);
   const [totalRules, setTotalRules] = useState(0);
 
   // Overrides
@@ -954,22 +1051,53 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
   const [overrideNote, setOverrideNote] = useState<Record<string, string>>({});
 
   const productStatus: Record<string, ProductStatusEntry> = client.filters?.product_status || {};
-  const allOverrides = { ...overrides, ...pendingOverrides };
+  const allOverrides: Record<string, RuleOverride> = { ...overrides, ...pendingOverrides };
   const productKeys = Object.keys(productStatus);
 
-  // ── 1. Load global stats once ──
-  useEffect(() => {
-    api.getClientRuleStats(client.id).then(stats => {
-      setTotalRules(stats.total);
-      const computed = computeGlobalStats(
-        stats.by_service || {},
-        stats.by_product || {},
+  // ── Derive base stats from rawStats + productStatus ──
+  const baseGlobalStats = useMemo(() => {
+    if (!rawStats) return null;
+    return computeGlobalStats(rawStats.by_service, rawStats.by_product, productStatus);
+  }, [rawStats]); // productStatus is stable for the lifetime of this modal
+
+  // ── Apply per-rule override deltas for visible page rules (realtime) ──
+  // Note: delta is approximate — only adjusts for rules loaded in the current page.
+  // Full accuracy requires a complete rule scan; this gives immediate visual feedback.
+  const liveGlobalStats = useMemo((): Record<ServiceStatus, number> | null => {
+    if (!baseGlobalStats) return null;
+    const adjusted: Record<ServiceStatus, number> = { ...baseGlobalStats };
+    const overrideEntries = Object.entries(allOverrides) as [string, RuleOverride][];
+    if (overrideEntries.length === 0) return adjusted;
+
+    for (const [ruleId, ov] of overrideEntries) {
+      const rule = rules.find((r: any) => String(r.id) === ruleId);
+      if (!rule) continue; // not in current page — skip
+      const baseline = resolveRuleStatus(
+        { logsource_product: rule.product, logsource_service: rule.service ?? rule.logsource_service },
         productStatus,
-        Object.keys(overrides).length,
+        {}, // intentionally empty: compute without any override
+        ruleId,
       );
-      setGlobalStats(computed);
-    }).catch(() => { /* degrade: stats will show as null */ });
-  }, [client.id]); // eslint-disable-line react-hooks/exhaustive-deps
+      if (baseline.status !== ov.status) {
+        adjusted[baseline.status] = Math.max(0, (adjusted[baseline.status] ?? 0) - 1);
+        adjusted[ov.status] = (adjusted[ov.status] ?? 0) + 1;
+      }
+    }
+    return adjusted;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseGlobalStats, allOverrides, rules]); // productStatus is stable for modal lifetime
+
+  // ── 1. Load / reload global stats ──
+  const loadStats = useCallback(() => {
+    api.getClientRuleStats(client.id)
+      .then(stats => {
+        setTotalRules(stats.total);
+        setRawStats({ total: stats.total, by_service: stats.by_service || {}, by_product: stats.by_product || {} });
+      })
+      .catch(() => { /* degrade: stats bar hidden */ });
+  }, [client.id]);
+
+  useEffect(() => { loadStats(); }, [loadStats]);
 
   // ── 2. Debounce search input → trigger fetch ──
   useEffect(() => {
@@ -1048,6 +1176,7 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
       });
       setOverrides(merged);
       setPendingOverrides({});
+      loadStats(); // ← recompute stats after save
     } catch (e: any) {
       alert(e.message || 'Error guardando overrides');
     } finally {
@@ -1060,12 +1189,12 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
   return (
     <Modal isOpen={true} onClose={onClose} title={`Reglas — ${client.name}`} size="2xl">
       <div className="space-y-4">
-        {/* ── Global stats (all rules, not just current page) ── */}
-        {globalStats && (
+        {/* ── Global stats (realtime, delta applied for visible-page overrides) ── */}
+        {liveGlobalStats && (
           <div className="space-y-2">
             <div className="flex flex-wrap gap-2">
               {SERVICE_STATUS_OPTIONS.map(opt => {
-                const count = globalStats[opt.value] || 0;
+                const count = liveGlobalStats[opt.value] || 0;
                 const pct = totalRules > 0 ? ((count / totalRules) * 100).toFixed(0) : '0';
                 return (
                   <span
@@ -1078,10 +1207,15 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                 );
               })}
             </div>
+            {Object.keys(allOverrides).length > 0 && Object.keys(pendingOverrides).length > 0 && (
+              <p className="text-[10px] text-slate-600 -mt-1">
+                * Los contadores reflejan overrides de la página actual. Guarda para aplicar globalmente.
+              </p>
+            )}
             {/* Stacked bar */}
             <div className="flex rounded-full h-3 overflow-hidden bg-a3sec-dark">
               {SERVICE_STATUS_OPTIONS.map(opt => {
-                const count = globalStats[opt.value] || 0;
+                const count = liveGlobalStats[opt.value] || 0;
                 const pct = totalRules > 0 ? (count / totalRules) * 100 : 0;
                 if (pct === 0) return null;
                 const colors: Record<ServiceStatus, string> = {
@@ -1155,13 +1289,12 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                   return (
                     <div
                       key={r.id}
-                      className={`p-3 rounded-lg border transition-all ${
-                        hasPendingOv
+                      className={`p-3 rounded-lg border transition-all ${hasPendingOv
                           ? 'border-brand-green/50 bg-brand-green/5'
                           : isOverridden
-                          ? 'border-blue-500/30 bg-blue-500/5'
-                          : 'border-a3sec-border bg-a3sec-deeper'
-                      }`}
+                            ? 'border-blue-500/30 bg-blue-500/5'
+                            : 'border-a3sec-border bg-a3sec-deeper'
+                        }`}
                     >
                       <div className="flex items-start gap-3">
                         <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${opt?.dot || 'bg-slate-400'}`} />
@@ -1173,12 +1306,11 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                               {(r.service || r.logsource_service) ? ` / ${r.service || r.logsource_service}` : ''}
                             </span>
                             {r.level && (
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                                r.level === 'critical' ? 'bg-red-900/50 text-red-300' :
-                                r.level === 'high' ? 'bg-red-800/30 text-red-400' :
-                                r.level === 'medium' ? 'bg-yellow-900/30 text-yellow-400' :
-                                'bg-slate-700/50 text-slate-400'
-                              }`}>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${r.level === 'critical' ? 'bg-red-900/50 text-red-300' :
+                                  r.level === 'high' ? 'bg-red-800/30 text-red-400' :
+                                    r.level === 'medium' ? 'bg-yellow-900/30 text-yellow-400' :
+                                      'bg-slate-700/50 text-slate-400'
+                                }`}>
                                 {r.level}
                               </span>
                             )}
@@ -1189,9 +1321,9 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[10px] text-slate-600">
                               {r.resolved.source === 'override' ? '✎ Override manual' :
-                               r.resolved.source === 'service' ? `↳ Servicio: ${r.service || r.logsource_service}` :
-                               r.resolved.source === 'product' ? `↳ Producto: ${r.product}` :
-                               '↳ Default'}
+                                r.resolved.source === 'service' ? `↳ Servicio: ${r.service || r.logsource_service}` :
+                                  r.resolved.source === 'product' ? `↳ Producto: ${r.product}` :
+                                    '↳ Default'}
                             </span>
                             {isOverridden && allOverrides[String(r.id)]?.note && (
                               <span className="text-[10px] text-slate-500 italic flex items-center gap-0.5">
@@ -1204,11 +1336,10 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                           <select
                             value={allOverrides[String(r.id)]?.status || r.resolved.status}
                             onChange={e => setOverrideStatus(r.id, e.target.value as ServiceStatus)}
-                            className={`text-[11px] py-1 px-1.5 rounded border text-slate-300 ${
-                              hasPendingOv
+                            className={`text-[11px] py-1 px-1.5 rounded border text-slate-300 ${hasPendingOv
                                 ? 'bg-brand-green/10 border-brand-green/40'
                                 : 'bg-a3sec-surface border-a3sec-muted'
-                            }`}
+                              }`}
                           >
                             {SERVICE_STATUS_OPTIONS.map(o => (
                               <option key={o.value} value={o.value}>{o.label}</option>
@@ -1344,11 +1475,10 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
               <button
                 key={p}
                 onClick={() => setPriorityFilter(priorityFilter === p ? 'all' : p)}
-                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
-                  priorityFilter === p
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${priorityFilter === p
                     ? `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} ring-2 ring-offset-1 ring-offset-a3sec-dark ring-slate-300`
                     : `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} opacity-80 hover:opacity-100`
-                }`}
+                  }`}
               >
                 <span className={`w-2 h-2 rounded-full ${priorityColors[p].dot}`} />
                 {data.priority_summary[p]} {p}
@@ -1437,6 +1567,159 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
   );
 };
 
+// ─── Client MITRE Matrix Modal ──────────────────────────────
+const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
+  const [matrix, setMatrix] = useState<MitreMatrixResponse | null>(null);
+  const [coveredIds, setCoveredIds] = useState<Set<string> | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [selectedTech, setSelectedTech] = useState<{ id: string; name: string } | null>(null);
+
+  useEffect(() => {
+    const techPattern = /T\d{4}(?:\.\d{3})?/i;
+
+    const fetchAll = async () => {
+      const [mat] = await Promise.all([api.getMitreMatrix()]);
+      setMatrix(mat);
+
+      // Paginate all client rules to extract covered technique IDs
+      const ids = new Set<string>();
+      let page = 1;
+      while (true) {
+        const res = await api.getClientRules(client.id, { page, page_size: 100 });
+        for (const rule of res.items) {
+          let atkIds: string[] = [];
+          try { atkIds = JSON.parse(rule.attack_ids || '[]'); } catch {
+            atkIds = (rule.attack_ids || '').split(',').map((s: string) => s.trim());
+          }
+          for (const raw of atkIds) {
+            const m = String(raw).match(techPattern);
+            if (m) ids.add(m[0].toUpperCase());
+          }
+        }
+        if (page >= (res.total_pages ?? 1)) break;
+        page++;
+        if (page > 200) break; // safety cap
+      }
+      setCoveredIds(ids);
+    };
+
+    fetchAll()
+      .catch(e => setError(e.message || 'Error cargando matriz'))
+      .finally(() => setLoading(false));
+  }, [client.id]);
+
+  const totalTechs = useMemo(() =>
+    matrix ? Object.values(matrix.techniques_by_tactic).flat().length : 0,
+  [matrix]);
+  const coveredCount = coveredIds?.size ?? 0;
+  const pct = totalTechs > 0 ? ((coveredCount / totalTechs) * 100).toFixed(1) : '0';
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title={`Matriz MITRE — ${client.name}`} size="3xl">
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="animate-spin text-brand-green mr-3" size={24} />
+          <span className="text-sm text-slate-400">Cargando matriz y reglas del cliente...</span>
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+      ) : matrix && coveredIds ? (
+        <div className="space-y-4">
+          {/* Summary row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="p-3 bg-brand-green/10 border border-brand-green/20 rounded-lg text-center min-w-[90px]">
+              <div className="text-xl font-bold text-brand-green">{pct}%</div>
+              <div className="text-xs text-brand-green font-medium">Cobertura</div>
+            </div>
+            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
+              <div className="text-xl font-bold text-white">{coveredCount}</div>
+              <div className="text-xs text-slate-500 font-medium">Cubiertas</div>
+            </div>
+            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
+              <div className="text-xl font-bold text-red-400">{totalTechs - coveredCount}</div>
+              <div className="text-xs text-slate-500 font-medium">Sin cobertura</div>
+            </div>
+            <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 shrink-0">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-brand-green/60 inline-block" /> Cubierta</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-a3sec-muted inline-block" /> No cubierta</span>
+            </div>
+          </div>
+
+          {/* Filter summary context */}
+          <div className="text-[10px] text-slate-500 bg-a3sec-deeper border border-a3sec-border rounded-lg px-3 py-2">
+            Basado en: <span className="text-slate-400">{filterSummary(client.filters)}</span>
+            {client.filters?.rule_overrides && Object.keys(client.filters.rule_overrides).length > 0 && (
+              <span className="ml-2 text-yellow-500">· {Object.keys(client.filters.rule_overrides).length} override(s) activo(s) <span className="text-slate-600">(no reflejados en esta vista)</span></span>
+            )}
+          </div>
+
+          {/* Matrix grid */}
+          <div className="overflow-x-auto border border-a3sec-border rounded-lg bg-a3sec-deeper max-h-[55vh]">
+            <div className="flex min-w-max">
+              {matrix.tactics.map(tactic => {
+                const techniques = matrix.techniques_by_tactic[tactic.id] || [];
+                const tacticCovered = techniques.filter(t => coveredIds.has(t.id.toUpperCase())).length;
+                return (
+                  <div key={tactic.id} className="w-36 flex-shrink-0 border-r border-a3sec-muted last:border-r-0">
+                    <div className="p-2 text-center border-b border-a3sec-muted bg-a3sec-muted sticky top-0 z-10">
+                      <div className="text-[10px] font-bold text-white leading-tight line-clamp-2">{tactic.name}</div>
+                      <div className="text-[9px] text-slate-400 mt-0.5">{tacticCovered}/{techniques.length}</div>
+                    </div>
+                    <div className="p-1 space-y-1 overflow-y-auto">
+                      {techniques.map(tech => {
+                        const covered = coveredIds.has(tech.id.toUpperCase());
+                        const isSelected = selectedTech?.id === tech.id;
+                        return (
+                          <button
+                            key={tech.id}
+                            type="button"
+                            onClick={() => setSelectedTech(isSelected ? null : { id: tech.id, name: tech.name })}
+                            className={`w-full text-left px-1.5 py-1 text-[10px] border rounded transition-all ${
+                              isSelected
+                                ? 'ring-2 ring-brand-green ring-offset-1 ring-offset-a3sec-dark'
+                                : ''
+                            } ${
+                              covered
+                                ? 'bg-brand-green/15 border-brand-green/30 text-brand-green hover:bg-brand-green/25'
+                                : 'bg-a3sec-surface border-a3sec-border text-slate-500 hover:bg-a3sec-deeper'
+                            }`}
+                            title={`${tech.id}: ${tech.name}`}
+                          >
+                            <div className="font-semibold truncate leading-tight">{tech.name}</div>
+                            <div className="text-[9px] opacity-60">{tech.id}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Selected technique info */}
+          {selectedTech && (
+            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-mono font-bold text-brand-green">{selectedTech.id}</span>
+                <span className="text-sm text-white font-medium">{selectedTech.name}</span>
+                {coveredIds.has(selectedTech.id.toUpperCase())
+                  ? <span className="text-[10px] bg-brand-green/10 text-brand-green border border-brand-green/20 px-2 py-0.5 rounded-full">Cubierta por reglas del cliente</span>
+                  : <span className="text-[10px] bg-red-900/20 text-red-400 border border-red-800/30 px-2 py-0.5 rounded-full">Sin cobertura para este cliente</span>
+                }
+              </div>
+              <button onClick={() => setSelectedTech(null)} className="text-slate-500 hover:text-slate-300 shrink-0">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </Modal>
+  );
+};
+
 // ─── Compare Modal ──────────────────────────────────────────
 const CompareModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
   const [data, setData] = useState<ClientCompare | null>(null);
@@ -1468,9 +1751,8 @@ const CompareModal: React.FC<{ client: ClientProfile; onClose: () => void }> = (
               <div className="text-3xl font-bold text-slate-300">{data.global_coverage.toFixed(1)}%</div>
               <div className="text-xs text-slate-500 font-medium mt-1">Global</div>
             </div>
-            <div className={`p-4 rounded-lg border ${
-              data.delta >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
-            }`}>
+            <div className={`p-4 rounded-lg border ${data.delta >= 0 ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'
+              }`}>
               <div className={`text-3xl font-bold ${data.delta >= 0 ? 'text-green-700' : 'text-red-600'}`}>
                 {data.delta > 0 ? '+' : ''}{data.delta.toFixed(1)}%
               </div>
