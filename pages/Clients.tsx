@@ -4,10 +4,30 @@ import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource
 import { FilterOptions } from '../types';
 import {
   Building2, Plus, Edit2, Trash2, Shield, BarChart3, AlertTriangle,
-  GitCompare, Loader2, XCircle, ExternalLink, X
+  GitCompare, Loader2, XCircle, ExternalLink, X, ChevronDown, ChevronRight
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { COLORS } from '../constants';
+
+// ─── Product Status Types & Constants ───────────────────────
+export type ServiceStatus = 'implemented' | 'not_implemented' | 'na' | 'planned' | 'in_progress';
+
+export interface ProductStatusEntry {
+  status: ServiceStatus;
+  services: Record<string, ServiceStatus>;
+}
+
+const SERVICE_STATUS_OPTIONS: { value: ServiceStatus; label: string; dot: string }[] = [
+  { value: 'implemented',     label: 'Implementado',     dot: 'bg-green-500' },
+  { value: 'not_implemented', label: 'No implementado',  dot: 'bg-red-500' },
+  { value: 'na',              label: 'N/A',              dot: 'bg-slate-400' },
+  { value: 'planned',         label: 'Planificado',      dot: 'bg-blue-500' },
+  { value: 'in_progress',     label: 'En progreso',      dot: 'bg-yellow-500' },
+];
+
+const STATUS_LABEL: Record<ServiceStatus, string> = Object.fromEntries(
+  SERVICE_STATUS_OPTIONS.map(o => [o.value, o.label])
+) as Record<ServiceStatus, string>;
 
 // ─── Helpers ────────────────────────────────────────────────
 const priorityColors = {
@@ -18,7 +38,15 @@ const priorityColors = {
 
 const filterSummary = (filters: Record<string, any>): string => {
   const parts: string[] = [];
-  if (filters.products?.length) parts.push(`Productos: ${filters.products.join(', ')}`);
+  if (filters.product_status && Object.keys(filters.product_status).length) {
+    const ps = Object.entries(filters.product_status as Record<string, ProductStatusEntry>);
+    parts.push(ps.map(([p, e]) => {
+      const svcCount = Object.keys(e.services || {}).length;
+      return `${p} (${STATUS_LABEL[e.status] || e.status}${svcCount ? ` · ${svcCount} svc` : ''})`;
+    }).join(', '));
+  } else if (filters.products?.length) {
+    parts.push(`Productos: ${filters.products.join(', ')}`);
+  }
   if (filters.min_level) parts.push(`Nivel ≥ ${filters.min_level}`);
   if (filters.levels?.length) parts.push(`Niveles: ${filters.levels.join(', ')}`);
   if (filters.statuses?.length) parts.push(`Status: ${filters.statuses.join(', ')}`);
@@ -105,7 +133,24 @@ export const Clients: React.FC = () => {
                     )}
                   </div>
                   {client.description && <p className="text-sm text-slate-500 mb-2">{client.description}</p>}
-                  <p className="text-xs text-slate-500">{filterSummary(client.filters)}</p>
+                  {/* Product status badges */}
+                  {client.filters.product_status && Object.keys(client.filters.product_status).length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {Object.entries(client.filters.product_status as Record<string, ProductStatusEntry>).map(([p, e]) => {
+                        const opt = SERVICE_STATUS_OPTIONS.find(o => o.value === e.status);
+                        const svcCount = Object.keys(e.services || {}).length;
+                        return (
+                          <span key={p} className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 bg-a3sec-deeper border border-a3sec-border rounded-full">
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${opt?.dot || 'bg-slate-400'}`} />
+                            <span className="text-slate-300 font-medium">{p}</span>
+                            {svcCount > 0 && <span className="text-slate-500 text-[10px]">{svcCount} svc</span>}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 mb-2">{filterSummary(client.filters)}</p>
+                  )}
                   <div className="flex items-center gap-4 mt-2 text-sm">
                     <span className="font-semibold text-slate-300">{client.rule_count.toLocaleString()} reglas</span>
                   </div>
@@ -174,6 +219,207 @@ export const Clients: React.FC = () => {
   );
 };
 
+// ─── Product Status Editor (self-contained) ─────────────────
+const ProductStatusEditor: React.FC<{
+  value: Record<string, ProductStatusEntry>;
+  onChange: (v: Record<string, ProductStatusEntry>) => void;
+  availableProducts: string[];
+}> = ({ value, onChange, availableProducts }) => {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [productInput, setProductInput] = useState('');
+  const [serviceInputs, setServiceInputs] = useState<Record<string, string>>({});
+  const [suggested, setSuggested] = useState<Record<string, string[]>>({});
+  const [loadingSvc, setLoadingSvc] = useState<Record<string, boolean>>({});
+
+  const fetchServices = useCallback(async (product: string) => {
+    if (suggested[product]) return;
+    setLoadingSvc(prev => ({ ...prev, [product]: true }));
+    try {
+      const res = await api.searchRules({ product, page_size: 200 });
+      const svcs = new Set<string>();
+      for (const r of res.rules) {
+        const svc = (r as any).logsource_service;
+        if (svc) svcs.add(svc);
+      }
+      setSuggested(prev => ({ ...prev, [product]: [...svcs].sort() }));
+    } catch { /* silently degrade */ } finally {
+      setLoadingSvc(prev => ({ ...prev, [product]: false }));
+    }
+  }, [suggested]);
+
+  const toggleExpand = (p: string) => {
+    const next = expanded === p ? null : p;
+    setExpanded(next);
+    if (next) fetchServices(next);
+  };
+
+  const addProduct = (raw: string) => {
+    const key = raw.trim().toLowerCase();
+    if (!key || value[key]) return;
+    onChange({ ...value, [key]: { status: 'not_implemented', services: {} } });
+    setProductInput('');
+    setExpanded(key);
+    fetchServices(key);
+  };
+
+  const removeProduct = (p: string) => {
+    const next = { ...value };
+    delete next[p];
+    onChange(next);
+    if (expanded === p) setExpanded(null);
+  };
+
+  const updateProductStatus = (p: string, s: ServiceStatus) =>
+    onChange({ ...value, [p]: { ...value[p], status: s } });
+
+  const addService = (product: string, raw: string) => {
+    const key = raw.trim().toLowerCase();
+    if (!key || value[product]?.services[key]) return;
+    const entry = value[product];
+    onChange({ ...value, [product]: { ...entry, services: { ...entry.services, [key]: 'not_implemented' } } });
+  };
+
+  const removeService = (product: string, svc: string) => {
+    const entry = value[product];
+    const svcs = { ...entry.services };
+    delete svcs[svc];
+    onChange({ ...value, [product]: { ...entry, services: svcs } });
+  };
+
+  const updateServiceStatus = (product: string, svc: string, s: ServiceStatus) => {
+    const entry = value[product];
+    onChange({ ...value, [product]: { ...entry, services: { ...entry.services, [svc]: s } } });
+  };
+
+  return (
+    <div className="space-y-2">
+      {Object.entries(value).map(([product, entry]) => {
+        const isOpen = expanded === product;
+        const svcCount = Object.keys((entry as ProductStatusEntry).services).length;
+        const statusOpt = SERVICE_STATUS_OPTIONS.find(o => o.value === (entry as ProductStatusEntry).status);
+        return (
+          <div key={product} className="border border-a3sec-muted rounded-lg overflow-hidden">
+            {/* Product header */}
+            <div className="flex items-center gap-2 p-2.5 bg-a3sec-deeper">
+              <button type="button" onClick={() => toggleExpand(product)}
+                className="text-slate-400 hover:text-white transition-colors" aria-expanded={isOpen}
+                aria-label={`${isOpen ? 'Colapsar' : 'Expandir'} ${product}`}>
+                {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              <span className={`w-2 h-2 rounded-full shrink-0 ${statusOpt?.dot || 'bg-slate-400'}`} />
+              <span className="text-sm font-semibold text-white flex-1">{product}</span>
+              {svcCount > 0 && <span className="text-[10px] text-slate-500">{svcCount} svc</span>}
+              <select value={(entry as ProductStatusEntry).status}
+                onChange={e => updateProductStatus(product, e.target.value as ServiceStatus)}
+                className="text-xs py-1 px-2 bg-a3sec-surface border border-a3sec-muted rounded text-slate-300">
+                {SERVICE_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <button type="button" onClick={() => removeProduct(product)}
+                className="text-slate-500 hover:text-red-500 transition-colors" aria-label={`Quitar ${product}`}>
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Services panel */}
+            {isOpen && (
+              <div className="p-3 space-y-2 border-t border-a3sec-border">
+                {/* Existing services */}
+                {Object.entries((entry as ProductStatusEntry).services).map(([svc, svcStatus]) => {
+                  const svcOpt = SERVICE_STATUS_OPTIONS.find(o => o.value === svcStatus);
+                  return (
+                    <div key={svc} className="flex items-center gap-2 group">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${svcOpt?.dot || 'bg-slate-400'}`} />
+                      <span className="text-xs text-slate-300 flex-1 font-mono">{svc}</span>
+                      <select value={svcStatus}
+                        onChange={e => updateServiceStatus(product, svc, e.target.value as ServiceStatus)}
+                        className="text-[11px] py-0.5 px-1.5 bg-a3sec-surface border border-a3sec-muted rounded text-slate-300">
+                        {SERVICE_STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      <button type="button" onClick={() => removeService(product, svc)}
+                        className="text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label={`Quitar ${svc}`}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {/* Loading */}
+                {loadingSvc[product] && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 py-1">
+                    <Loader2 size={12} className="animate-spin" /> Cargando servicios...
+                  </div>
+                )}
+
+                {/* Suggested services */}
+                {(() => {
+                  const pending = (suggested[product] || []).filter(s => !(entry as ProductStatusEntry).services[s]);
+                  if (!pending.length) return null;
+                  return (
+                    <div className="pt-1">
+                      <span className="text-[10px] text-slate-500 uppercase tracking-wider">Sugeridos desde reglas</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {pending.map(s => (
+                          <button key={s} type="button" onClick={() => addService(product, s)}
+                            className="text-[11px] px-2 py-0.5 bg-a3sec-surface border border-a3sec-muted rounded-full hover:border-brand-green hover:text-brand-green transition-colors text-slate-400">
+                            + {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Free-text service input */}
+                <div className="flex gap-1.5 pt-1">
+                  <input
+                    className="flex-1 p-1.5 text-xs border border-a3sec-muted rounded bg-a3sec-surface text-slate-300 placeholder:text-slate-600"
+                    value={serviceInputs[product] || ''}
+                    onChange={e => setServiceInputs(prev => ({ ...prev, [product]: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addService(product, serviceInputs[product] || '');
+                        setServiceInputs(prev => ({ ...prev, [product]: '' }));
+                      }
+                    }}
+                    placeholder="Agregar servicio manualmente..."
+                  />
+                  <button type="button"
+                    onClick={() => { addService(product, serviceInputs[product] || ''); setServiceInputs(prev => ({ ...prev, [product]: '' })); }}
+                    disabled={!(serviceInputs[product] || '').trim()}
+                    className="px-2 text-xs bg-a3sec-surface border border-a3sec-muted rounded hover:bg-a3sec-muted disabled:opacity-40 text-slate-400">
+                    <Plus size={12} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Add product */}
+      <div className="flex gap-2">
+        <input
+          className="flex-1 p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface text-slate-300 placeholder:text-slate-600"
+          value={productInput}
+          onChange={e => setProductInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addProduct(productInput); } }}
+          placeholder="Agregar producto (ej: aws, windows, linux)..."
+          list="ps-product-opts"
+        />
+        <datalist id="ps-product-opts">
+          {availableProducts.filter(p => !value[p]).map(p => <option key={p} value={p} />)}
+        </datalist>
+        <button type="button" onClick={() => addProduct(productInput)} disabled={!productInput.trim()}
+          className="px-3 py-2 text-sm bg-a3sec-dark border border-a3sec-muted rounded-lg hover:bg-a3sec-muted disabled:opacity-40 text-slate-300">
+          Agregar
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ─── Client Form Modal (Create / Edit) ─────────────────────
 const ClientFormModal: React.FC<{
   editing: ClientProfile | null;
@@ -186,7 +432,12 @@ const ClientFormModal: React.FC<{
   const [error, setError] = useState('');
 
   // Filter fields
-  const [products, setProducts] = useState<string[]>(editing?.filters?.products || []);
+  const [productStatus, setProductStatus] = useState<Record<string, ProductStatusEntry>>(() => {
+    if (editing?.filters?.product_status) return editing.filters.product_status;
+    // Migrate legacy products[] → product_status
+    const legacy: string[] = editing?.filters?.products || [];
+    return Object.fromEntries(legacy.map(p => [p, { status: 'implemented' as ServiceStatus, services: {} }]));
+  });
   const [minLevel, setMinLevel] = useState<string>(editing?.filters?.min_level || '');
   const [statuses, setStatuses] = useState<string[]>(editing?.filters?.statuses || []);
   const [repoSourceIds, setRepoSourceIds] = useState<number[]>(editing?.filters?.repo_source_ids || []);
@@ -194,9 +445,6 @@ const ClientFormModal: React.FC<{
   // Dynamic options
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [repos, setRepos] = useState<GitRepoSource[]>([]);
-
-  // Product input
-  const [productInput, setProductInput] = useState('');
 
   useEffect(() => {
     api.getFilters().then(setFilterOptions).catch(() => {});
@@ -207,21 +455,17 @@ const ClientFormModal: React.FC<{
   const statusOptions = ['stable', 'test', 'experimental', 'deprecated'];
   const levelOptions = ['', 'low', 'medium', 'high', 'critical'];
 
-  const addProduct = (p: string) => {
-    const trimmed = p.trim().toLowerCase();
-    if (trimmed && !products.includes(trimmed)) {
-      setProducts([...products, trimmed]);
-    }
-    setProductInput('');
-  };
-
   const handleSave = async () => {
     if (!name.trim()) return;
     setSaving(true);
     setError('');
 
-    const filters: Record<string, any> = { v: 1 };
-    if (products.length) filters.products = products;
+    const filters: Record<string, any> = { v: 2 };
+    const productKeys = Object.keys(productStatus);
+    if (productKeys.length) {
+      filters.products = productKeys;              // backward-compat para backend actual
+      filters.product_status = productStatus;       // estructura granular
+    }
     if (minLevel) filters.min_level = minLevel;
     if (statuses.length) filters.statuses = statuses;
     if (repoSourceIds.length) filters.repo_source_ids = repoSourceIds;
@@ -280,42 +524,14 @@ const ClientFormModal: React.FC<{
         <div className="border-t border-a3sec-border pt-4">
           <h4 className="text-sm font-semibold text-slate-300 mb-3">Filtros de Reglas</h4>
 
-          {/* Products */}
+          {/* Products & Services — Granular Status */}
           <div className="mb-4">
-            <label className="block text-xs font-medium text-slate-400 mb-1">Productos (logsource)</label>
-            <div className="flex flex-wrap gap-1 mb-2">
-              {products.map(p => (
-                <span key={p} className="inline-flex items-center gap-1 bg-blue-100 text-brand-green text-xs px-2 py-1 rounded-full">
-                  {p}
-                  <button type="button" onClick={() => setProducts(products.filter(x => x !== p))} className="hover:text-red-600">
-                    <X size={12} />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                className="flex-1 p-2 border border-a3sec-muted rounded-lg text-sm"
-                value={productInput}
-                onChange={e => setProductInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addProduct(productInput); } }}
-                placeholder="Escribe o selecciona un producto..."
-                list="product-options"
-              />
-              <datalist id="product-options">
-                {availableProducts.filter(p => !products.includes(p)).map(p => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-              <button
-                type="button"
-                onClick={() => addProduct(productInput)}
-                disabled={!productInput.trim()}
-                className="px-3 py-2 text-sm bg-a3sec-dark border border-a3sec-muted rounded-lg hover:bg-a3sec-muted disabled:opacity-40"
-              >
-                Agregar
-              </button>
-            </div>
+            <label className="block text-xs font-medium text-slate-400 mb-1.5">Productos y Servicios</label>
+            <ProductStatusEditor
+              value={productStatus}
+              onChange={setProductStatus}
+              availableProducts={availableProducts}
+            />
           </div>
 
           {/* Min Level */}
