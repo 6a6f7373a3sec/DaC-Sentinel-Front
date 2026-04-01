@@ -660,7 +660,7 @@ const CoverageModal: React.FC<{ client: ClientProfile; onClose: () => void }> = 
         let items: any[] = [];
         let hasMore = true;
         while (hasMore) {
-          const res = await api.getClientRules(client.id, page, 100);
+          const res = await api.getClientRules(client.id, { page, page_size: 100 });
           items = items.concat(res.items);
           hasMore = items.length < res.total;
           page++;
@@ -882,7 +882,7 @@ const CoverageModal: React.FC<{ client: ClientProfile; onClose: () => void }> = 
   );
 };
 
-// ─── Rules Modal (with granular status + override) ──────────
+// ─── Rules Modal (server-side search + granular status + override) ──
 const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -892,10 +892,13 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
   const [totalPages, setTotalPages] = useState(1);
   const pageSize = 20;
 
-  // Filters
-  const [statusFilter, setStatusFilter] = useState<ServiceStatus | 'all'>('all');
+  // Server-side filters
   const [searchQ, setSearchQ] = useState('');
-  const [productFilter, setProductFilter] = useState<string>('all');
+  const [debouncedQ, setDebouncedQ] = useState('');
+  const [productFilter, setProductFilter] = useState('');
+
+  // Client-side status filter (post-classification, within current page)
+  const [statusFilter, setStatusFilter] = useState<ServiceStatus | 'all'>('all');
 
   // Overrides — stored in filters.rule_overrides
   const [overrides, setOverrides] = useState<Record<string, RuleOverride>>(
@@ -907,24 +910,47 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
 
   const productStatus: Record<string, ProductStatusEntry> = client.filters?.product_status || {};
   const allOverrides = { ...overrides, ...pendingOverrides };
+  const productKeys = Object.keys(productStatus);
 
+  // Debounce search → reset page
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQ(searchQ);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQ]);
+
+  // Reset page on product filter change
+  const handleProductChange = (v: string) => {
+    setProductFilter(v);
+    setPage(1);
+  };
+
+  // Fetch rules server-side
   const loadRules = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const res = await api.getClientRules(client.id, page, pageSize);
+      const res = await api.getClientRules(client.id, {
+        q: debouncedQ || undefined,
+        product: productFilter || undefined,
+        page,
+        page_size: pageSize,
+      });
       setRules(res.items);
       setTotal(res.total);
-      setTotalPages(Math.ceil(res.total / pageSize));
+      setTotalPages(res.total_pages ?? Math.ceil(res.total / pageSize));
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
-  }, [client.id, page]);
+  }, [client.id, debouncedQ, productFilter, page]);
 
   useEffect(() => { loadRules(); }, [loadRules]);
 
-  // Classify each rule
+  // Classify each rule (status resolution is still client-side — depends on product_status + overrides)
   const classifiedRules = rules.map(r => {
     const resolved = resolveRuleStatus(
       { logsource_product: r.product, logsource_service: r.service || r.logsource_service },
@@ -935,16 +961,16 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
     return { ...r, resolved };
   });
 
-  // Client-side filtering
-  const filteredRules = classifiedRules.filter(r => {
-    if (statusFilter !== 'all' && r.resolved.status !== statusFilter) return false;
-    if (productFilter !== 'all' && (r.product || '').toLowerCase() !== productFilter) return false;
-    if (searchQ) {
-      const q = searchQ.toLowerCase();
-      if (!(r.title || '').toLowerCase().includes(q) && !(r.attack_ids || '').toLowerCase().includes(q)) return false;
-    }
-    return true;
-  });
+  // Status filter is client-side within current server page
+  const displayRules = statusFilter === 'all'
+    ? classifiedRules
+    : classifiedRules.filter(r => r.resolved.status === statusFilter);
+
+  // Stats for the current page (informational)
+  const pageStats = classifiedRules.reduce((acc, r) => {
+    acc[r.resolved.status] = (acc[r.resolved.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
   const setOverride = (ruleId: string | number, status: ServiceStatus) => {
     const key = String(ruleId);
@@ -961,7 +987,6 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
       delete next[key];
       return next;
     });
-    // Also remove from saved overrides
     setOverrides(prev => {
       const next = { ...prev };
       delete next[key];
@@ -986,21 +1011,14 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
   };
 
   const hasPending = Object.keys(pendingOverrides).length > 0;
-  const productKeys = Object.keys(productStatus);
-
-  // Stats
-  const stats = classifiedRules.reduce((acc, r) => {
-    acc[r.resolved.status] = (acc[r.resolved.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
 
   return (
     <Modal isOpen={true} onClose={onClose} title={`Reglas — ${client.name}`} size="2xl">
       <div className="space-y-4">
-        {/* Stats bar */}
+        {/* Status pills (client-side filter within page) */}
         <div className="flex flex-wrap gap-2">
           {SERVICE_STATUS_OPTIONS.map(opt => {
-            const count = stats[opt.value] || 0;
+            const count = pageStats[opt.value] || 0;
             const isActive = statusFilter === opt.value;
             return (
               <button
@@ -1019,7 +1037,7 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
           })}
         </div>
 
-        {/* Filters row */}
+        {/* Search + Product filter (server-side) */}
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -1027,16 +1045,16 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
               className="w-full pl-8 pr-3 py-1.5 text-xs border border-a3sec-muted rounded-lg bg-a3sec-surface text-slate-300 placeholder:text-slate-600"
               value={searchQ}
               onChange={e => setSearchQ(e.target.value)}
-              placeholder="Buscar por título o ATT&CK ID..."
+              placeholder="Buscar por título, descripción o ATT&CK ID..."
             />
           </div>
           {productKeys.length > 1 && (
             <select
               value={productFilter}
-              onChange={e => setProductFilter(e.target.value)}
+              onChange={e => handleProductChange(e.target.value)}
               className="text-xs py-1.5 px-2 bg-a3sec-surface border border-a3sec-muted rounded-lg text-slate-300"
             >
-              <option value="all">Todos los productos</option>
+              <option value="">Todos los productos</option>
               {productKeys.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           )}
@@ -1052,12 +1070,15 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
         ) : (
           <>
             <div className="max-h-[50vh] overflow-y-auto space-y-1.5 pr-1">
-              {filteredRules.length === 0 ? (
+              {displayRules.length === 0 ? (
                 <div className="text-center text-sm text-slate-500 py-8">
-                  No hay reglas que coincidan con los filtros
+                  {rules.length === 0
+                    ? (debouncedQ || productFilter ? 'Sin resultados para esta búsqueda' : 'No hay reglas para este cliente')
+                    : `No hay reglas con status "${STATUS_LABEL[statusFilter as ServiceStatus] || statusFilter}" en esta página`
+                  }
                 </div>
               ) : (
-                filteredRules.map(r => {
+                displayRules.map(r => {
                   const opt = SERVICE_STATUS_OPTIONS.find(o => o.value === r.resolved.status);
                   const isOverridden = r.resolved.source === 'override';
                   const hasPendingOv = pendingOverrides[String(r.id)] !== undefined;
@@ -1073,10 +1094,7 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                       }`}
                     >
                       <div className="flex items-start gap-3">
-                        {/* Status dot */}
                         <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${opt?.dot || 'bg-slate-400'}`} />
-
-                        {/* Rule info */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-medium text-white truncate">{r.title}</span>
@@ -1096,11 +1114,8 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                             )}
                           </div>
                           {r.attack_ids && (
-                            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
-                              {r.attack_ids}
-                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">{r.attack_ids}</div>
                           )}
-                          {/* Source indicator */}
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[10px] text-slate-600">
                               {r.resolved.source === 'override' ? '✎ Override manual' :
@@ -1115,8 +1130,6 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                             )}
                           </div>
                         </div>
-
-                        {/* Override controls */}
                         <div className="flex items-center gap-1.5 shrink-0">
                           <select
                             value={allOverrides[String(r.id)]?.status || r.resolved.status}
@@ -1143,8 +1156,6 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                           )}
                         </div>
                       </div>
-
-                      {/* Note input (shown when pending) */}
                       {hasPendingOv && (
                         <div className="mt-2 ml-5">
                           <input
@@ -1161,11 +1172,11 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
               )}
             </div>
 
-            {/* Pagination */}
+            {/* Pagination — uses server total_pages */}
             <div className="flex items-center justify-between pt-2 border-t border-a3sec-border">
               <span className="text-xs text-slate-500">
-                {filteredRules.length} de {total} reglas
-                {statusFilter !== 'all' && ` (filtro: ${STATUS_LABEL[statusFilter]})`}
+                {total} regla{total !== 1 ? 's' : ''}
+                {(debouncedQ || productFilter) ? ' (filtrado)' : ''}
               </span>
               <div className="flex items-center gap-1">
                 <button

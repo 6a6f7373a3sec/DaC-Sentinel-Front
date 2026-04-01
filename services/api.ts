@@ -597,11 +597,21 @@ class ApiService {
     return this.request<ClientCoverage>(`/clients/${id}/coverage?domain=${domain}`);
   }
 
-  async getClientRules(id: number, page = 1, pageSize = 20): Promise<{
+  async getClientRules(
+    id: number,
+    params: { q?: string; product?: string; page?: number; page_size?: number } = {},
+  ): Promise<{
     client_id: number; client_name: string; total: number; page: number; page_size: number;
-    items: { id: number; path: string; title: string; level: string; status: string; product: string; category: string; attack_ids: string }[];
+    total_pages: number;
+    items: { id: number; path: string; title: string; level: string; status: string; product: string; service?: string; logsource_service?: string; category: string; attack_ids: string }[];
   }> {
-    return this.request(`/clients/${id}/rules?page=${page}&page_size=${pageSize}`);
+    const qs = new URLSearchParams();
+    const { q, product, page = 1, page_size = 20 } = params;
+    if (q) qs.set('q', q);
+    if (product) qs.set('product', product);
+    qs.set('page', String(page));
+    qs.set('page_size', String(page_size));
+    return this.request(`/clients/${id}/rules?${qs.toString()}`);
   }
 
   async getClientGaps(id: number, domain = 'enterprise'): Promise<ClientGaps> {
