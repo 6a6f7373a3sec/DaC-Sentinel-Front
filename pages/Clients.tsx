@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { api } from '../services/api';
-import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource } from '../services/api';
+import { api, resolveRuleStatus } from '../services/api';
+import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource, RuleOverride } from '../services/api';
 import { FilterOptions } from '../types';
 import {
   Building2, Plus, Edit2, Trash2, Shield, BarChart3, AlertTriangle,
-  GitCompare, Loader2, XCircle, ExternalLink, X, ChevronDown, ChevronRight
+  GitCompare, Loader2, XCircle, ExternalLink, X, ChevronDown, ChevronRight,
+  List, Filter, Search, Save, MessageSquare, ChevronLeft, Undo2
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { COLORS } from '../constants';
@@ -65,6 +66,7 @@ export const Clients: React.FC = () => {
   // Modals
   const [formModal, setFormModal] = useState<{ open: boolean; editing: ClientProfile | null }>({ open: false, editing: null });
   const [coverageModal, setCoverageModal] = useState<ClientProfile | null>(null);
+  const [rulesModal, setRulesModal] = useState<ClientProfile | null>(null);
   const [gapsModal, setGapsModal] = useState<ClientProfile | null>(null);
   const [compareModal, setCompareModal] = useState<ClientProfile | null>(null);
 
@@ -157,6 +159,13 @@ export const Clients: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap gap-2 shrink-0">
                   <button
+                    onClick={() => setRulesModal(client)}
+                    className="px-3 py-1.5 text-xs font-medium border border-brand-green/40 text-brand-green rounded-lg hover:bg-brand-green/10 flex items-center gap-1"
+                    aria-label={`Ver reglas de ${client.name}`}
+                  >
+                    <List size={14} /> Reglas
+                  </button>
+                  <button
                     onClick={() => setCoverageModal(client)}
                     className="px-3 py-1.5 text-xs font-medium border border-a3sec-muted rounded-lg hover:bg-a3sec-deeper flex items-center gap-1"
                     aria-label={`Ver cobertura de ${client.name}`}
@@ -208,6 +217,9 @@ export const Clients: React.FC = () => {
       )}
       {coverageModal && (
         <CoverageModal client={coverageModal} onClose={() => setCoverageModal(null)} />
+      )}
+      {rulesModal && (
+        <RulesModal client={rulesModal} onClose={() => setRulesModal(null)} />
       )}
       {gapsModal && (
         <GapsModal client={gapsModal} onClose={() => setGapsModal(null)} />
@@ -617,11 +629,19 @@ const ClientFormModal: React.FC<{
   );
 };
 
-// ─── Coverage Modal ─────────────────────────────────────────
+// ─── Coverage Modal (enhanced with product dashboard) ───────
 const CoverageModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
   const [data, setData] = useState<ClientCoverage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [tab, setTab] = useState<'mitre' | 'products'>('mitre');
+
+  // Load ALL client rules to classify by status
+  const [allRules, setAllRules] = useState<any[]>([]);
+  const [loadingRules, setLoadingRules] = useState(false);
+
+  const productStatus: Record<string, ProductStatusEntry> = client.filters?.product_status || {};
+  const overrides: Record<string, RuleOverride> = client.filters?.rule_overrides || {};
 
   useEffect(() => {
     api.getClientCoverage(client.id)
@@ -630,73 +650,587 @@ const CoverageModal: React.FC<{ client: ClientProfile; onClose: () => void }> = 
       .finally(() => setLoading(false));
   }, [client.id]);
 
+  // Lazy-load all rules when "products" tab is selected
+  useEffect(() => {
+    if (tab !== 'products' || allRules.length > 0 || loadingRules) return;
+    const fetchAll = async () => {
+      setLoadingRules(true);
+      try {
+        let page = 1;
+        let items: any[] = [];
+        let hasMore = true;
+        while (hasMore) {
+          const res = await api.getClientRules(client.id, page, 100);
+          items = items.concat(res.items);
+          hasMore = items.length < res.total;
+          page++;
+          if (page > 50) break; // safety
+        }
+        setAllRules(items);
+      } catch { /* degrade gracefully */ } finally {
+        setLoadingRules(false);
+      }
+    };
+    fetchAll();
+  }, [tab, client.id, allRules.length, loadingRules]);
+
+  // Classify rules
+  const classifiedRules = allRules.map(r => ({
+    ...r,
+    resolved: resolveRuleStatus(
+      { logsource_product: r.product, logsource_service: r.service || r.logsource_service },
+      productStatus,
+      overrides,
+      r.id,
+    ),
+  }));
+
+  // Product-level stats
+  const productStats = Object.entries(productStatus).map(([product, entry]) => {
+    const rules = classifiedRules.filter(r => (r.product || '').toLowerCase() === product);
+    const byStatus = rules.reduce((acc, r) => {
+      acc[r.resolved.status] = (acc[r.resolved.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    const svcStats = Object.entries(entry.services).map(([svc, svcStatus]) => {
+      const svcRules = rules.filter(r => (r.service || r.logsource_service || '').toLowerCase() === svc);
+      return { name: svc, status: svcStatus, ruleCount: svcRules.length };
+    });
+    return { product, entry, totalRules: rules.length, byStatus, svcStats };
+  });
+
+  const STATUS_COLORS: Record<ServiceStatus, string> = {
+    implemented: '#22c55e',
+    not_implemented: '#ef4444',
+    na: '#94a3b8',
+    planned: '#3b82f6',
+    in_progress: '#eab308',
+  };
+
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Cobertura MITRE — ${client.name}`} size="2xl">
+    <Modal isOpen={true} onClose={onClose} title={`Cobertura — ${client.name}`} size="2xl">
       {loading ? (
         <div className="flex items-center justify-center py-12"><Loader2 className="animate-spin text-slate-400" size={32} /></div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
       ) : data ? (
-        <div className="space-y-6">
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="p-3 bg-brand-green/10 border border-blue-100 rounded-lg text-center">
-              <div className="text-2xl font-bold text-brand-green">{data.coverage_percentage.toFixed(1)}%</div>
-              <div className="text-xs text-brand-green font-medium">Cobertura</div>
-            </div>
-            <div className="p-3 bg-green-50 border border-green-100 rounded-lg text-center">
-              <div className="text-2xl font-bold text-green-700">{data.covered_techniques}</div>
-              <div className="text-xs text-green-600 font-medium">Técnicas cubiertas</div>
-            </div>
-            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center">
-              <div className="text-2xl font-bold text-slate-300">{data.total_techniques}</div>
-              <div className="text-xs text-slate-500 font-medium">Total técnicas</div>
-            </div>
-            <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-center">
-              <div className="text-2xl font-bold text-red-600">{data.uncovered_count}</div>
-              <div className="text-xs text-red-500 font-medium">Sin cubrir</div>
-            </div>
+        <div className="space-y-5">
+          {/* Tab switcher */}
+          <div className="flex gap-1 p-1 bg-a3sec-deeper rounded-lg w-fit">
+            {([['mitre', 'MITRE ATT&CK'], ['products', 'Por Producto']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  tab === key
+                    ? 'bg-a3sec-surface text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          {/* By Tactic */}
-          <div>
-            <h4 className="text-sm font-semibold text-slate-300 mb-3">Cobertura por Táctica</h4>
-            <div className="space-y-2">
-              {Object.entries(data.by_tactic)
-                .sort((a: [string, any], b: [string, any]) => (b[1].percentage || 0) - (a[1].percentage || 0))
-                .map(([tactic, info]: [string, any]) => (
-                <div key={tactic} className="flex items-center gap-3">
-                  <div className="w-40 text-xs text-slate-400 truncate font-medium" title={tactic}>
-                    {tactic.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                  </div>
-                  <div className="flex-1 bg-a3sec-dark rounded-full h-5 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.max(info.percentage || 0, 1)}%`,
-                        backgroundColor: (info.percentage || 0) > 50 ? COLORS.success : (info.percentage || 0) > 25 ? COLORS.warning : COLORS.danger,
-                      }}
-                    />
-                  </div>
-                  <div className="w-20 text-right text-xs font-semibold text-slate-400">
-                    {(info.percentage || 0).toFixed(0)}% <span className="text-slate-400 font-normal">({info.covered}/{info.total})</span>
-                  </div>
+          {tab === 'mitre' ? (
+            <>
+              {/* Original MITRE stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 bg-brand-green/10 border border-brand-green/20 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-brand-green">{data.coverage_percentage.toFixed(1)}%</div>
+                  <div className="text-xs text-brand-green font-medium">Cobertura</div>
                 </div>
-              ))}
+                <div className="p-3 bg-green-900/20 border border-green-800/30 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-green-400">{data.covered_techniques}</div>
+                  <div className="text-xs text-green-500 font-medium">Cubiertas</div>
+                </div>
+                <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center">
+                  <div className="text-2xl font-bold text-slate-300">{data.total_techniques}</div>
+                  <div className="text-xs text-slate-500 font-medium">Total</div>
+                </div>
+                <div className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-center">
+                  <div className="text-2xl font-bold text-red-400">{data.uncovered_count}</div>
+                  <div className="text-xs text-red-500 font-medium">Sin cubrir</div>
+                </div>
+              </div>
+
+              {/* By Tactic */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-300 mb-3">Cobertura por Táctica</h4>
+                <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-1">
+                  {Object.entries(data.by_tactic)
+                    .sort((a: [string, any], b: [string, any]) => (b[1].percentage || 0) - (a[1].percentage || 0))
+                    .map(([tactic, info]: [string, any]) => (
+                    <div key={tactic} className="flex items-center gap-3">
+                      <div className="w-40 text-xs text-slate-400 truncate font-medium" title={tactic}>
+                        {tactic.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      </div>
+                      <div className="flex-1 bg-a3sec-dark rounded-full h-5 overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.max(info.percentage || 0, 1)}%`,
+                            backgroundColor: (info.percentage || 0) > 50 ? COLORS.success : (info.percentage || 0) > 25 ? COLORS.warning : COLORS.danger,
+                          }}
+                        />
+                      </div>
+                      <div className="w-20 text-right text-xs font-semibold text-slate-400">
+                        {(info.percentage || 0).toFixed(0)}% <span className="font-normal">({info.covered}/{info.total})</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ─── Products Tab ─── */
+            <div className="space-y-4">
+              {loadingRules ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="animate-spin text-slate-400 mr-2" size={20} />
+                  <span className="text-sm text-slate-500">Clasificando reglas...</span>
+                </div>
+              ) : productStats.length === 0 ? (
+                <div className="text-center text-sm text-slate-500 py-8">
+                  No hay productos configurados con status granular.
+                  <br />
+                  <span className="text-xs text-slate-600">Edita el perfil para agregar productos con servicios.</span>
+                </div>
+              ) : (
+                <>
+                  {/* Global status legend */}
+                  <div className="flex flex-wrap gap-3 text-[11px] text-slate-500">
+                    {SERVICE_STATUS_OPTIONS.map(o => (
+                      <span key={o.value} className="inline-flex items-center gap-1">
+                        <span className={`w-2 h-2 rounded-full ${o.dot}`} /> {o.label}
+                      </span>
+                    ))}
+                  </div>
+
+                  {productStats.map(ps => {
+                    const statusOpt = SERVICE_STATUS_OPTIONS.find(o => o.value === ps.entry.status);
+                    return (
+                      <div key={ps.product} className="border border-a3sec-border rounded-lg overflow-hidden">
+                        {/* Product header */}
+                        <div className="flex items-center gap-3 p-3 bg-a3sec-deeper">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${statusOpt?.dot || 'bg-slate-400'}`} />
+                          <span className="text-sm font-bold text-white flex-1">{ps.product}</span>
+                          <span className="text-xs text-slate-500">{statusOpt?.label}</span>
+                          <span className="text-xs font-semibold text-slate-300">{ps.totalRules} reglas</span>
+                        </div>
+
+                        {/* Stacked bar */}
+                        {ps.totalRules > 0 && (
+                          <div className="px-3 pt-2 pb-1">
+                            <div className="flex rounded-full h-4 overflow-hidden bg-a3sec-dark">
+                              {SERVICE_STATUS_OPTIONS.map(o => {
+                                const count = ps.byStatus[o.value] || 0;
+                                const pct = (count / ps.totalRules) * 100;
+                                if (pct === 0) return null;
+                                return (
+                                  <div
+                                    key={o.value}
+                                    className="h-full transition-all duration-500 first:rounded-l-full last:rounded-r-full"
+                                    style={{ width: `${pct}%`, backgroundColor: STATUS_COLORS[o.value] }}
+                                    title={`${o.label}: ${count} (${pct.toFixed(0)}%)`}
+                                  />
+                                );
+                              })}
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5 mb-1">
+                              {SERVICE_STATUS_OPTIONS.map(o => {
+                                const count = ps.byStatus[o.value] || 0;
+                                if (count === 0) return null;
+                                return (
+                                  <span key={o.value} className="text-[10px] text-slate-500">
+                                    <span className="inline-block w-1.5 h-1.5 rounded-full mr-0.5" style={{ backgroundColor: STATUS_COLORS[o.value] }} />
+                                    {count} {o.label.toLowerCase()}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Services breakdown */}
+                        {ps.svcStats.length > 0 && (
+                          <div className="px-3 pb-3 space-y-1">
+                            <span className="text-[10px] text-slate-600 uppercase tracking-wider">Servicios</span>
+                            {ps.svcStats.map(svc => {
+                              const svcOpt = SERVICE_STATUS_OPTIONS.find(o => o.value === svc.status);
+                              return (
+                                <div key={svc.name} className="flex items-center gap-2">
+                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${svcOpt?.dot || 'bg-slate-400'}`} />
+                                  <span className="text-xs text-slate-300 font-mono flex-1">{svc.name}</span>
+                                  <span className="text-[10px] text-slate-500">{svcOpt?.label}</span>
+                                  <span className="text-[10px] text-slate-600">{svc.ruleCount} reglas</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
-          </div>
+          )}
         </div>
       ) : null}
     </Modal>
   );
 };
 
-// ─── Gaps Modal ─────────────────────────────────────────────
+// ─── Rules Modal (with granular status + override) ──────────
+const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
+  const [rules, setRules] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageSize = 20;
+
+  // Filters
+  const [statusFilter, setStatusFilter] = useState<ServiceStatus | 'all'>('all');
+  const [searchQ, setSearchQ] = useState('');
+  const [productFilter, setProductFilter] = useState<string>('all');
+
+  // Overrides — stored in filters.rule_overrides
+  const [overrides, setOverrides] = useState<Record<string, RuleOverride>>(
+    () => client.filters?.rule_overrides || {}
+  );
+  const [pendingOverrides, setPendingOverrides] = useState<Record<string, RuleOverride>>({});
+  const [savingOverrides, setSavingOverrides] = useState(false);
+  const [overrideNote, setOverrideNote] = useState<Record<string, string>>({});
+
+  const productStatus: Record<string, ProductStatusEntry> = client.filters?.product_status || {};
+  const allOverrides = { ...overrides, ...pendingOverrides };
+
+  const loadRules = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.getClientRules(client.id, page, pageSize);
+      setRules(res.items);
+      setTotal(res.total);
+      setTotalPages(Math.ceil(res.total / pageSize));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [client.id, page]);
+
+  useEffect(() => { loadRules(); }, [loadRules]);
+
+  // Classify each rule
+  const classifiedRules = rules.map(r => {
+    const resolved = resolveRuleStatus(
+      { logsource_product: r.product, logsource_service: r.service || r.logsource_service },
+      productStatus,
+      allOverrides,
+      r.id,
+    );
+    return { ...r, resolved };
+  });
+
+  // Client-side filtering
+  const filteredRules = classifiedRules.filter(r => {
+    if (statusFilter !== 'all' && r.resolved.status !== statusFilter) return false;
+    if (productFilter !== 'all' && (r.product || '').toLowerCase() !== productFilter) return false;
+    if (searchQ) {
+      const q = searchQ.toLowerCase();
+      if (!(r.title || '').toLowerCase().includes(q) && !(r.attack_ids || '').toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+
+  const setOverride = (ruleId: string | number, status: ServiceStatus) => {
+    const key = String(ruleId);
+    setPendingOverrides(prev => ({
+      ...prev,
+      [key]: { status, note: overrideNote[key] || '', updated_at: new Date().toISOString() },
+    }));
+  };
+
+  const removeOverride = (ruleId: string | number) => {
+    const key = String(ruleId);
+    setPendingOverrides(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    // Also remove from saved overrides
+    setOverrides(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const saveOverrides = async () => {
+    setSavingOverrides(true);
+    try {
+      const merged = { ...overrides, ...pendingOverrides };
+      await api.updateClient(client.id, {
+        filters: { ...client.filters, rule_overrides: merged },
+      });
+      setOverrides(merged);
+      setPendingOverrides({});
+    } catch (e: any) {
+      alert(e.message || 'Error guardando overrides');
+    } finally {
+      setSavingOverrides(false);
+    }
+  };
+
+  const hasPending = Object.keys(pendingOverrides).length > 0;
+  const productKeys = Object.keys(productStatus);
+
+  // Stats
+  const stats = classifiedRules.reduce((acc, r) => {
+    acc[r.resolved.status] = (acc[r.resolved.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title={`Reglas — ${client.name}`} size="2xl">
+      <div className="space-y-4">
+        {/* Stats bar */}
+        <div className="flex flex-wrap gap-2">
+          {SERVICE_STATUS_OPTIONS.map(opt => {
+            const count = stats[opt.value] || 0;
+            const isActive = statusFilter === opt.value;
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setStatusFilter(isActive ? 'all' : opt.value)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                  isActive
+                    ? 'ring-2 ring-offset-1 ring-offset-a3sec-dark ring-brand-green border-brand-green text-white'
+                    : 'border-a3sec-muted text-slate-400 hover:text-slate-300 hover:border-slate-500'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
+                {opt.label} <span className="text-slate-500">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Filters row */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              className="w-full pl-8 pr-3 py-1.5 text-xs border border-a3sec-muted rounded-lg bg-a3sec-surface text-slate-300 placeholder:text-slate-600"
+              value={searchQ}
+              onChange={e => setSearchQ(e.target.value)}
+              placeholder="Buscar por título o ATT&CK ID..."
+            />
+          </div>
+          {productKeys.length > 1 && (
+            <select
+              value={productFilter}
+              onChange={e => setProductFilter(e.target.value)}
+              className="text-xs py-1.5 px-2 bg-a3sec-surface border border-a3sec-muted rounded-lg text-slate-300"
+            >
+              <option value="all">Todos los productos</option>
+              {productKeys.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          )}
+        </div>
+
+        {/* Rules list */}
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="animate-spin text-slate-400" size={32} />
+          </div>
+        ) : error ? (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+        ) : (
+          <>
+            <div className="max-h-[50vh] overflow-y-auto space-y-1.5 pr-1">
+              {filteredRules.length === 0 ? (
+                <div className="text-center text-sm text-slate-500 py-8">
+                  No hay reglas que coincidan con los filtros
+                </div>
+              ) : (
+                filteredRules.map(r => {
+                  const opt = SERVICE_STATUS_OPTIONS.find(o => o.value === r.resolved.status);
+                  const isOverridden = r.resolved.source === 'override';
+                  const hasPendingOv = pendingOverrides[String(r.id)] !== undefined;
+                  return (
+                    <div
+                      key={r.id}
+                      className={`p-3 rounded-lg border transition-all ${
+                        hasPendingOv
+                          ? 'border-brand-green/50 bg-brand-green/5'
+                          : isOverridden
+                          ? 'border-blue-500/30 bg-blue-500/5'
+                          : 'border-a3sec-border bg-a3sec-deeper'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Status dot */}
+                        <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${opt?.dot || 'bg-slate-400'}`} />
+
+                        {/* Rule info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-white truncate">{r.title}</span>
+                            <span className="text-[10px] px-1.5 py-0.5 bg-a3sec-dark rounded text-slate-500 font-mono shrink-0">
+                              {r.product}
+                              {(r.service || r.logsource_service) ? ` / ${r.service || r.logsource_service}` : ''}
+                            </span>
+                            {r.level && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                                r.level === 'critical' ? 'bg-red-900/50 text-red-300' :
+                                r.level === 'high' ? 'bg-red-800/30 text-red-400' :
+                                r.level === 'medium' ? 'bg-yellow-900/30 text-yellow-400' :
+                                'bg-slate-700/50 text-slate-400'
+                              }`}>
+                                {r.level}
+                              </span>
+                            )}
+                          </div>
+                          {r.attack_ids && (
+                            <div className="text-[10px] text-slate-500 mt-0.5 font-mono">
+                              {r.attack_ids}
+                            </div>
+                          )}
+                          {/* Source indicator */}
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] text-slate-600">
+                              {r.resolved.source === 'override' ? '✎ Override manual' :
+                               r.resolved.source === 'service' ? `↳ Servicio: ${r.service || r.logsource_service}` :
+                               r.resolved.source === 'product' ? `↳ Producto: ${r.product}` :
+                               '↳ Default'}
+                            </span>
+                            {isOverridden && allOverrides[String(r.id)]?.note && (
+                              <span className="text-[10px] text-slate-500 italic flex items-center gap-0.5">
+                                <MessageSquare size={9} /> {allOverrides[String(r.id)].note}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Override controls */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <select
+                            value={allOverrides[String(r.id)]?.status || r.resolved.status}
+                            onChange={e => setOverride(r.id, e.target.value as ServiceStatus)}
+                            className={`text-[11px] py-1 px-1.5 rounded border text-slate-300 ${
+                              hasPendingOv
+                                ? 'bg-brand-green/10 border-brand-green/40'
+                                : 'bg-a3sec-surface border-a3sec-muted'
+                            }`}
+                          >
+                            {SERVICE_STATUS_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                          {(isOverridden || hasPendingOv) && (
+                            <button
+                              onClick={() => removeOverride(r.id)}
+                              className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                              title="Quitar override (volver a status automático)"
+                              aria-label="Quitar override"
+                            >
+                              <Undo2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Note input (shown when pending) */}
+                      {hasPendingOv && (
+                        <div className="mt-2 ml-5">
+                          <input
+                            className="w-full p-1.5 text-[11px] border border-a3sec-muted rounded bg-a3sec-surface text-slate-300 placeholder:text-slate-600"
+                            value={overrideNote[String(r.id)] || ''}
+                            onChange={e => setOverrideNote(prev => ({ ...prev, [String(r.id)]: e.target.value }))}
+                            placeholder="Nota (opcional): ej. 'Implementado en Sentinel'"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-between pt-2 border-t border-a3sec-border">
+              <span className="text-xs text-slate-500">
+                {filteredRules.length} de {total} reglas
+                {statusFilter !== 'all' && ` (filtro: ${STATUS_LABEL[statusFilter]})`}
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30"
+                  aria-label="Página anterior"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+                <span className="text-xs text-slate-400 px-2">{page} / {totalPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="p-1.5 text-slate-400 hover:text-white disabled:opacity-30"
+                  aria-label="Página siguiente"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Save overrides bar */}
+        {hasPending && (
+          <div className="flex items-center justify-between p-3 bg-brand-green/10 border border-brand-green/30 rounded-lg">
+            <span className="text-xs text-brand-green font-medium">
+              {Object.keys(pendingOverrides).length} override(s) pendiente(s)
+            </span>
+            <button
+              onClick={saveOverrides}
+              disabled={savingOverrides}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-green text-a3sec-dark rounded-lg hover:bg-brand-green/90 disabled:opacity-50"
+            >
+              {savingOverrides ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+              {savingOverrides ? 'Guardando...' : 'Guardar overrides'}
+            </button>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+};
+
+// ─── Gaps Modal (with N/A awareness) ────────────────────────
 const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
   const [data, setData] = useState<ClientGaps | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [hideNA, setHideNA] = useState(false);
+
+  const productStatus: Record<string, ProductStatusEntry> = client.filters?.product_status || {};
+  const hasGranular = Object.keys(productStatus).length > 0;
+
+  // Collect all services marked N/A
+  const naServices = new Set<string>();
+  const naProducts = new Set<string>();
+  for (const [product, entry] of Object.entries(productStatus)) {
+    if (entry.status === 'na') naProducts.add(product);
+    for (const [svc, svcStatus] of Object.entries(entry.services)) {
+      if (svcStatus === 'na') naServices.add(`${product}:${svc}`);
+    }
+  }
 
   useEffect(() => {
     api.getClientGaps(client.id)
@@ -707,7 +1241,10 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
 
   const allGaps = data ? Object.values(data.gaps_by_tactic).flat() : [];
   const uniqueGaps = data ? [...new Map(allGaps.map((g: any) => [g.id, g])).values()] : [];
-  const filteredGaps = priorityFilter === 'all' ? uniqueGaps : uniqueGaps.filter((g: any) => g.priority === priorityFilter);
+  const filteredGaps = uniqueGaps.filter((g: any) => {
+    if (priorityFilter !== 'all' && g.priority !== priorityFilter) return false;
+    return true;
+  });
 
   return (
     <Modal isOpen={true} onClose={onClose} title={`Gaps MITRE — ${client.name}`} size="2xl">
@@ -726,7 +1263,7 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
                 onClick={() => setPriorityFilter(priorityFilter === p ? 'all' : p)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
                   priorityFilter === p
-                    ? `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} ring-2 ring-offset-1 ring-slate-300`
+                    ? `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} ring-2 ring-offset-1 ring-offset-a3sec-dark ring-slate-300`
                     : `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} opacity-80 hover:opacity-100`
                 }`}
               >
@@ -741,17 +1278,44 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
             )}
           </div>
 
+          {/* N/A awareness info */}
+          {hasGranular && (naProducts.size > 0 || naServices.size > 0) && (
+            <div className="flex items-center justify-between p-2.5 bg-a3sec-deeper border border-a3sec-border rounded-lg">
+              <span className="text-xs text-slate-500">
+                {naProducts.size > 0 && `${naProducts.size} producto(s) N/A`}
+                {naProducts.size > 0 && naServices.size > 0 && ' · '}
+                {naServices.size > 0 && `${naServices.size} servicio(s) N/A`}
+                {' — estos gaps podrían no aplicar a tu entorno'}
+              </span>
+              <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={hideNA}
+                  onChange={e => setHideNA(e.target.checked)}
+                  className="rounded border-a3sec-muted"
+                />
+                Atenuar N/A
+              </label>
+            </div>
+          )}
+
           {/* Gap list */}
-          <div className="max-h-[55vh] overflow-y-auto space-y-2 pr-1">
+          <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1">
             {filteredGaps
               .sort((a: any, b: any) => {
                 const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
                 return (order[a.priority] ?? 3) - (order[b.priority] ?? 3);
               })
               .map((gap: any) => {
-                const pc = priorityColors[gap.priority];
+                const pc = priorityColors[gap.priority as keyof typeof priorityColors] || priorityColors.low;
+                // Determine if this gap is "N/A-only" — heuristic: if all client products are N/A
+                const isNARelated = hasGranular && [...naProducts].length === Object.keys(productStatus).length;
+                const dimmed = hideNA && isNARelated;
                 return (
-                  <div key={gap.id} className={`p-3 rounded-lg border ${pc.border} ${pc.bg}`}>
+                  <div
+                    key={gap.id}
+                    className={`p-3 rounded-lg border transition-opacity ${pc.border} ${pc.bg} ${dimmed ? 'opacity-30' : ''}`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-2">

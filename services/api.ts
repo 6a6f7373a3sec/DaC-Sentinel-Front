@@ -31,6 +31,21 @@ export interface GitRepoSource {
   created_at: string;
 }
 
+export type ServiceStatus = 'implemented' | 'not_implemented' | 'na' | 'planned' | 'in_progress';
+
+export interface ProductStatusEntry {
+  status: ServiceStatus;
+  services: Record<string, ServiceStatus>;
+}
+
+/** Per-rule override: analyst can set a status different from the auto-inferred one */
+export interface RuleOverride {
+  status: ServiceStatus;
+  note?: string;
+  updated_by?: string;
+  updated_at?: string;
+}
+
 export interface ClientProfile {
   id: number;
   name: string;
@@ -40,6 +55,32 @@ export interface ClientProfile {
   rule_count: number;
   created_at: string;
   updated_at: string | null;
+}
+
+/** Resolves the effective status of a rule based on product_status config */
+export function resolveRuleStatus(
+  rule: { logsource_product?: string | null; logsource_service?: string | null },
+  productStatus: Record<string, ProductStatusEntry>,
+  overrides: Record<string, RuleOverride>,
+  ruleId: string | number,
+): { status: ServiceStatus; source: 'override' | 'service' | 'product' | 'default' } {
+  // 1. Check override first
+  const ov = overrides[String(ruleId)];
+  if (ov) return { status: ov.status, source: 'override' };
+
+  const product = (rule.logsource_product || '').toLowerCase();
+  const service = (rule.logsource_service || '').toLowerCase();
+  const entry = productStatus[product];
+
+  if (!entry) return { status: 'not_implemented', source: 'default' };
+
+  // 2. Check service-level status
+  if (service && entry.services[service] !== undefined) {
+    return { status: entry.services[service], source: 'service' };
+  }
+
+  // 3. Fall back to product-level
+  return { status: entry.status, source: 'product' };
 }
 
 export interface ClientCoverage {
