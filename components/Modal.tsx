@@ -7,9 +7,11 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
+  /** Disable backdrop blur for heavy/matrix modals (GPU cost on scroll) */
+  noBlur?: boolean;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md' }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md', noBlur = false }) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,7 +42,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
   }[size];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-a3sec-deeper/80 backdrop-blur-sm">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-a3sec-deeper/80 ${noBlur ? '' : 'backdrop-blur-sm'}`}>
       <div 
         ref={modalRef}
         className={`bg-a3sec-dark rounded-xl shadow-2xl w-full ${maxWidthClass} flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200 border border-a3sec-border`}

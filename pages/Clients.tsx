@@ -242,7 +242,19 @@ export const Clients: React.FC = () => {
         <CoverageModal client={coverageModal} onClose={() => setCoverageModal(null)} />
       )}
       {rulesModal && (
-        <RulesModal client={rulesModal} onClose={() => setRulesModal(null)} />
+        <RulesModal
+          client={rulesModal}
+          onClose={() => setRulesModal(null)}
+          onOverridesSaved={async () => {
+            // Refetch fresh client so re-opening the modal sees updated rule_overrides
+            try {
+              const fresh = await api.getClient(rulesModal.id);
+              setRulesModal(fresh);
+              // Also update the clients list in background
+              loadClients();
+            } catch { /* degrade silently — local state still correct */ }
+          }}
+        />
       )}
       {gapsModal && (
         <GapsModal client={gapsModal} onClose={() => setGapsModal(null)} />
@@ -821,8 +833,8 @@ const CoverageModal: React.FC<{ client: ClientProfile; onClose: () => void }> = 
                 key={key}
                 onClick={() => setTab(key)}
                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${tab === key
-                    ? 'bg-a3sec-surface text-white shadow-sm'
-                    : 'text-slate-500 hover:text-slate-300'
+                  ? 'bg-a3sec-surface text-white shadow-sm'
+                  : 'text-slate-500 hover:text-slate-300'
                   }`}
               >
                 {label}
@@ -1023,7 +1035,11 @@ function computeGlobalStats(
 }
 
 // ─── Rules Modal (server-side search + global stats + override) ─────
-const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
+const RulesModal: React.FC<{
+  client: ClientProfile;
+  onClose: () => void;
+  onOverridesSaved?: () => Promise<void>;
+}> = ({ client, onClose, onOverridesSaved }) => {
   const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -1039,7 +1055,7 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
   const [activePage, setActivePage] = useState(1);
 
   // Raw stats from API (source of truth for totals)
-  const [rawStats, setRawStats] = useState<{ total: number; by_service: Record<string,number>; by_product: Record<string,number> } | null>(null);
+  const [rawStats, setRawStats] = useState<{ total: number; by_service: Record<string, number>; by_product: Record<string, number> } | null>(null);
   const [totalRules, setTotalRules] = useState(0);
 
   // Overrides
@@ -1084,7 +1100,7 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
       }
     }
     return adjusted;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseGlobalStats, allOverrides, rules]); // productStatus is stable for modal lifetime
 
   // ── 1. Load / reload global stats ──
@@ -1176,7 +1192,8 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
       });
       setOverrides(merged);
       setPendingOverrides({});
-      loadStats(); // ← recompute stats after save
+      loadStats();
+      await onOverridesSaved?.(); // ← sync parent reference
     } catch (e: any) {
       alert(e.message || 'Error guardando overrides');
     } finally {
@@ -1290,10 +1307,10 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                     <div
                       key={r.id}
                       className={`p-3 rounded-lg border transition-all ${hasPendingOv
-                          ? 'border-brand-green/50 bg-brand-green/5'
-                          : isOverridden
-                            ? 'border-blue-500/30 bg-blue-500/5'
-                            : 'border-a3sec-border bg-a3sec-deeper'
+                        ? 'border-brand-green/50 bg-brand-green/5'
+                        : isOverridden
+                          ? 'border-blue-500/30 bg-blue-500/5'
+                          : 'border-a3sec-border bg-a3sec-deeper'
                         }`}
                     >
                       <div className="flex items-start gap-3">
@@ -1307,9 +1324,9 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                             </span>
                             {r.level && (
                               <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${r.level === 'critical' ? 'bg-red-900/50 text-red-300' :
-                                  r.level === 'high' ? 'bg-red-800/30 text-red-400' :
-                                    r.level === 'medium' ? 'bg-yellow-900/30 text-yellow-400' :
-                                      'bg-slate-700/50 text-slate-400'
+                                r.level === 'high' ? 'bg-red-800/30 text-red-400' :
+                                  r.level === 'medium' ? 'bg-yellow-900/30 text-yellow-400' :
+                                    'bg-slate-700/50 text-slate-400'
                                 }`}>
                                 {r.level}
                               </span>
@@ -1337,8 +1354,8 @@ const RulesModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ 
                             value={allOverrides[String(r.id)]?.status || r.resolved.status}
                             onChange={e => setOverrideStatus(r.id, e.target.value as ServiceStatus)}
                             className={`text-[11px] py-1 px-1.5 rounded border text-slate-300 ${hasPendingOv
-                                ? 'bg-brand-green/10 border-brand-green/40'
-                                : 'bg-a3sec-surface border-a3sec-muted'
+                              ? 'bg-brand-green/10 border-brand-green/40'
+                              : 'bg-a3sec-surface border-a3sec-muted'
                               }`}
                           >
                             {SERVICE_STATUS_OPTIONS.map(o => (
@@ -1476,8 +1493,8 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
                 key={p}
                 onClick={() => setPriorityFilter(priorityFilter === p ? 'all' : p)}
                 className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${priorityFilter === p
-                    ? `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} ring-2 ring-offset-1 ring-offset-a3sec-dark ring-slate-300`
-                    : `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} opacity-80 hover:opacity-100`
+                  ? `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} ring-2 ring-offset-1 ring-offset-a3sec-dark ring-slate-300`
+                  : `${priorityColors[p].bg} ${priorityColors[p].text} ${priorityColors[p].border} opacity-80 hover:opacity-100`
                   }`}
               >
                 <span className={`w-2 h-2 rounded-full ${priorityColors[p].dot}`} />
@@ -1578,45 +1595,60 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
   useEffect(() => {
     const techPattern = /T\d{4}(?:\.\d{3})?/i;
 
-    const fetchAll = async () => {
-      const [mat] = await Promise.all([api.getMitreMatrix()]);
-      setMatrix(mat);
-
-      // Paginate all client rules to extract covered technique IDs
-      const ids = new Set<string>();
-      let page = 1;
-      while (true) {
-        const res = await api.getClientRules(client.id, { page, page_size: 100 });
-        for (const rule of res.items) {
-          let atkIds: string[] = [];
-          try { atkIds = JSON.parse(rule.attack_ids || '[]'); } catch {
-            atkIds = (rule.attack_ids || '').split(',').map((s: string) => s.trim());
-          }
-          for (const raw of atkIds) {
-            const m = String(raw).match(techPattern);
-            if (m) ids.add(m[0].toUpperCase());
-          }
+    const extractIds = (items: any[], target: Set<string>) => {
+      for (const rule of items) {
+        let atkIds: string[] = [];
+        try { atkIds = JSON.parse(rule.attack_ids || '[]'); } catch {
+          atkIds = (rule.attack_ids || '').split(',').map((s: string) => s.trim());
         }
-        if (page >= (res.total_pages ?? 1)) break;
-        page++;
-        if (page > 200) break; // safety cap
+        for (const raw of atkIds) {
+          const m = String(raw).match(techPattern);
+          if (m) target.add(m[0].toUpperCase());
+        }
+      }
+    };
+
+    const fetchAll = async () => {
+      // Matrix structure + first rules page in parallel — matrix visible immediately
+      const [mat, firstPage] = await Promise.all([
+        api.getMitreMatrix(),
+        api.getClientRules(client.id, { page: 1, page_size: 100 }),
+      ]);
+      setMatrix(mat);
+      setLoading(false); // ← matrix renders NOW, coverage loads in background
+
+      const ids = new Set<string>();
+      extractIds(firstPage.items, ids);
+
+      const totalPages = Math.min(firstPage.total_pages ?? 1, 100); // safety cap
+      if (totalPages > 1) {
+        // Fetch ALL remaining pages in parallel
+        const requests = Array.from(
+          { length: totalPages - 1 },
+          (_, i) => api.getClientRules(client.id, { page: i + 2, page_size: 100 }),
+        );
+        const results = await Promise.allSettled(requests);
+        for (const r of results) {
+          if (r.status === 'fulfilled') extractIds(r.value.items, ids);
+        }
       }
       setCoveredIds(ids);
     };
 
-    fetchAll()
-      .catch(e => setError(e.message || 'Error cargando matriz'))
-      .finally(() => setLoading(false));
+    fetchAll().catch(e => {
+      setError(e.message || 'Error cargando matriz');
+      setLoading(false);
+    });
   }, [client.id]);
 
   const totalTechs = useMemo(() =>
     matrix ? Object.values(matrix.techniques_by_tactic).flat().length : 0,
-  [matrix]);
+    [matrix]);
   const coveredCount = coveredIds?.size ?? 0;
   const pct = totalTechs > 0 ? ((coveredCount / totalTechs) * 100).toFixed(1) : '0';
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Matriz MITRE — ${client.name}`} size="3xl">
+    <Modal isOpen={true} onClose={onClose} title={`Matriz MITRE — ${client.name}`} size="3xl" noBlur>
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <Loader2 className="animate-spin text-brand-green mr-3" size={24} />
@@ -1624,29 +1656,46 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
-      ) : matrix && coveredIds ? (
+      ) : matrix ? (
         <div className="space-y-4">
-          {/* Summary row */}
+          {/* Summary row — skeleton while coverage loads */}
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="p-3 bg-brand-green/10 border border-brand-green/20 rounded-lg text-center min-w-[90px]">
-              <div className="text-xl font-bold text-brand-green">{pct}%</div>
-              <div className="text-xs text-brand-green font-medium">Cobertura</div>
-            </div>
-            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
-              <div className="text-xl font-bold text-white">{coveredCount}</div>
-              <div className="text-xs text-slate-500 font-medium">Cubiertas</div>
-            </div>
-            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
-              <div className="text-xl font-bold text-red-400">{totalTechs - coveredCount}</div>
-              <div className="text-xs text-slate-500 font-medium">Sin cobertura</div>
-            </div>
+            {coveredIds ? (
+              <>
+                <div className="p-3 bg-brand-green/10 border border-brand-green/20 rounded-lg text-center min-w-[90px]">
+                  <div className="text-xl font-bold text-brand-green">{pct}%</div>
+                  <div className="text-xs text-brand-green font-medium">Cobertura</div>
+                </div>
+                <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
+                  <div className="text-xl font-bold text-white">{coveredCount}</div>
+                  <div className="text-xs text-slate-500 font-medium">Cubiertas</div>
+                </div>
+                <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
+                  <div className="text-xl font-bold text-red-400">{totalTechs - coveredCount}</div>
+                  <div className="text-xs text-slate-500 font-medium">Sin cobertura</div>
+                </div>
+              </>
+            ) : (
+              <>
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px] animate-pulse">
+                    <div className="h-6 w-12 bg-a3sec-muted rounded mx-auto mb-1" />
+                    <div className="h-3 w-16 bg-a3sec-border rounded mx-auto" />
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 text-xs text-slate-500 ml-2">
+                  <Loader2 size={12} className="animate-spin text-brand-green" />
+                  Calculando cobertura...
+                </div>
+              </>
+            )}
             <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 shrink-0">
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-brand-green/60 inline-block" /> Cubierta</span>
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-a3sec-muted inline-block" /> No cubierta</span>
             </div>
           </div>
 
-          {/* Filter summary context */}
+          {/* Filter summary context — only once matrix is visible */}
           <div className="text-[10px] text-slate-500 bg-a3sec-deeper border border-a3sec-border rounded-lg px-3 py-2">
             Basado en: <span className="text-slate-400">{filterSummary(client.filters)}</span>
             {client.filters?.rule_overrides && Object.keys(client.filters.rule_overrides).length > 0 && (
@@ -1654,36 +1703,45 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
             )}
           </div>
 
-          {/* Matrix grid */}
-          <div className="overflow-x-auto border border-a3sec-border rounded-lg bg-a3sec-deeper max-h-[55vh]">
-            <div className="flex min-w-max">
+          {/* Matrix grid — GPU-promoted scroll container, no transition-all on cells */}
+          <div
+            className="overflow-x-auto border border-a3sec-border rounded-lg bg-a3sec-deeper"
+            style={{ maxHeight: '55vh', willChange: 'scroll-position', contain: 'strict' }}
+          >
+            <div className="flex min-w-max h-full">
               {matrix.tactics.map(tactic => {
                 const techniques = matrix.techniques_by_tactic[tactic.id] || [];
-                const tacticCovered = techniques.filter(t => coveredIds.has(t.id.toUpperCase())).length;
+                const tacticCovered = coveredIds
+                  ? techniques.filter(t => coveredIds.has(t.id.toUpperCase())).length
+                  : null;
                 return (
-                  <div key={tactic.id} className="w-36 flex-shrink-0 border-r border-a3sec-muted last:border-r-0">
-                    <div className="p-2 text-center border-b border-a3sec-muted bg-a3sec-muted sticky top-0 z-10">
+                  <div key={tactic.id} className="w-36 flex-shrink-0 border-r border-a3sec-muted last:border-r-0 flex flex-col">
+                    <div className="p-2 text-center border-b border-a3sec-muted bg-a3sec-muted sticky top-0 z-10 shrink-0">
                       <div className="text-[10px] font-bold text-white leading-tight line-clamp-2">{tactic.name}</div>
-                      <div className="text-[9px] text-slate-400 mt-0.5">{tacticCovered}/{techniques.length}</div>
+                      <div className="text-[9px] text-slate-400 mt-0.5">
+                        {tacticCovered !== null ? `${tacticCovered}/${techniques.length}` : `—/${techniques.length}`}
+                      </div>
                     </div>
-                    <div className="p-1 space-y-1 overflow-y-auto">
+                    <div className="p-1 space-y-1 overflow-y-auto flex-1" style={{ contain: 'content' }}>
                       {techniques.map(tech => {
-                        const covered = coveredIds.has(tech.id.toUpperCase());
+                        const covered = coveredIds ? coveredIds.has(tech.id.toUpperCase()) : null;
                         const isSelected = selectedTech?.id === tech.id;
+                        // Pre-compute className to avoid string concat on every scroll frame
+                        let cellClass = 'w-full text-left px-1.5 py-1 text-[10px] border rounded ';
+                        if (isSelected) cellClass += 'ring-2 ring-brand-green ring-offset-1 ring-offset-a3sec-dark ';
+                        if (covered === null) {
+                          cellClass += 'bg-a3sec-deeper border-a3sec-border text-slate-600 animate-pulse';
+                        } else if (covered) {
+                          cellClass += 'bg-brand-green/15 border-brand-green/30 text-brand-green hover:bg-brand-green/25';
+                        } else {
+                          cellClass += 'bg-a3sec-surface border-a3sec-border text-slate-500 hover:bg-a3sec-deeper';
+                        }
                         return (
                           <button
                             key={tech.id}
                             type="button"
                             onClick={() => setSelectedTech(isSelected ? null : { id: tech.id, name: tech.name })}
-                            className={`w-full text-left px-1.5 py-1 text-[10px] border rounded transition-all ${
-                              isSelected
-                                ? 'ring-2 ring-brand-green ring-offset-1 ring-offset-a3sec-dark'
-                                : ''
-                            } ${
-                              covered
-                                ? 'bg-brand-green/15 border-brand-green/30 text-brand-green hover:bg-brand-green/25'
-                                : 'bg-a3sec-surface border-a3sec-border text-slate-500 hover:bg-a3sec-deeper'
-                            }`}
+                            className={cellClass}
                             title={`${tech.id}: ${tech.name}`}
                           >
                             <div className="font-semibold truncate leading-tight">{tech.name}</div>
@@ -1699,7 +1757,7 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
           </div>
 
           {/* Selected technique info */}
-          {selectedTech && (
+          {selectedTech && coveredIds && (
             <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-mono font-bold text-brand-green">{selectedTech.id}</span>
