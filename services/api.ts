@@ -614,6 +614,16 @@ class ApiService {
     return this.request(`/clients/${id}/rules?${qs.toString()}`);
   }
 
+  async getClientRuleStats(id: number): Promise<{
+    client_id: number;
+    client_name: string;
+    total: number;
+    by_product: Record<string, number>;
+    by_service: Record<string, number>;
+  }> {
+    return this.request(`/clients/${id}/rules/stats`);
+  }
+
   async getClientGaps(id: number, domain = 'enterprise'): Promise<ClientGaps> {
     return this.request<ClientGaps>(`/clients/${id}/gaps?domain=${domain}`);
   }
