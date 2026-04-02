@@ -1603,19 +1603,27 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
         }
         for (const raw of atkIds) {
           const m = String(raw).match(techPattern);
-          if (m) target.add(m[0].toUpperCase());
+          if (m) {
+            const full = m[0].toUpperCase();
+            target.add(full);
+            // Also light up the parent technique cell (T1560 from T1560.001)
+            const parent = full.split('.')[0];
+            if (parent !== full) target.add(parent);
+          }
         }
       }
     };
 
     const fetchAll = async () => {
-      // Matrix structure + first rules page in parallel — matrix visible immediately
-      const [mat, firstPage] = await Promise.all([
+      // Phase 1: matrix structure + server stats + first rules page — all in parallel
+      const [mat, cov, firstPage] = await Promise.all([
         api.getMitreMatrix(),
+        api.getClientCoverage(client.id), // authoritative stats — same as CoverageModal
         api.getClientRules(client.id, { page: 1, page_size: 100 }),
       ]);
       setMatrix(mat);
-      setLoading(false); // ← matrix renders NOW, coverage loads in background
+      setCoverage(cov);
+      setLoading(false); // ← matrix renders NOW with correct stats
 
       const ids = new Set<string>();
       extractIds(firstPage.items, ids);
@@ -1641,11 +1649,8 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
     });
   }, [client.id]);
 
-  const totalTechs = useMemo(() =>
-    matrix ? Object.values(matrix.techniques_by_tactic).flat().length : 0,
-    [matrix]);
-  const coveredCount = coveredIds?.size ?? 0;
-  const pct = totalTechs > 0 ? ((coveredCount / totalTechs) * 100).toFixed(1) : '0';
+  // ── Stats: use server coverage API — same source as CoverageModal, guaranteed consistent ──
+  const [coverage, setCoverage] = useState<ClientCoverage | null>(null);
 
   return (
     <Modal isOpen={true} onClose={onClose} title={`Matriz MITRE — ${client.name}`} size="3xl" noBlur>
@@ -1658,36 +1663,40 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
       ) : matrix ? (
         <div className="space-y-4">
-          {/* Summary row — skeleton while coverage loads */}
+          {/* Stats: from server (getClientCoverage) — consistent with CoverageModal */}
           <div className="flex items-center gap-3 flex-wrap">
-            {coveredIds ? (
+            {coverage ? (
               <>
                 <div className="p-3 bg-brand-green/10 border border-brand-green/20 rounded-lg text-center min-w-[90px]">
-                  <div className="text-xl font-bold text-brand-green">{pct}%</div>
+                  <div className="text-xl font-bold text-brand-green">{coverage.coverage_percentage.toFixed(1)}%</div>
                   <div className="text-xs text-brand-green font-medium">Cobertura</div>
                 </div>
                 <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
-                  <div className="text-xl font-bold text-white">{coveredCount}</div>
+                  <div className="text-xl font-bold text-white">{coverage.covered_techniques}</div>
                   <div className="text-xs text-slate-500 font-medium">Cubiertas</div>
                 </div>
                 <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px]">
-                  <div className="text-xl font-bold text-red-400">{totalTechs - coveredCount}</div>
-                  <div className="text-xs text-slate-500 font-medium">Sin cobertura</div>
+                  <div className="text-xl font-bold text-slate-300">{coverage.total_techniques}</div>
+                  <div className="text-xs text-slate-500 font-medium">Total</div>
+                </div>
+                <div className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-center min-w-[90px]">
+                  <div className="text-xl font-bold text-red-400">{coverage.uncovered_count}</div>
+                  <div className="text-xs text-red-500 font-medium">Sin cubrir</div>
                 </div>
               </>
             ) : (
-              <>
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px] animate-pulse">
-                    <div className="h-6 w-12 bg-a3sec-muted rounded mx-auto mb-1" />
-                    <div className="h-3 w-16 bg-a3sec-border rounded mx-auto" />
-                  </div>
-                ))}
-                <div className="flex items-center gap-2 text-xs text-slate-500 ml-2">
-                  <Loader2 size={12} className="animate-spin text-brand-green" />
-                  Calculando cobertura...
+              [...Array(4)].map((_, i) => (
+                <div key={i} className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center min-w-[90px] animate-pulse">
+                  <div className="h-6 w-12 bg-a3sec-muted rounded mx-auto mb-1" />
+                  <div className="h-3 w-16 bg-a3sec-border rounded mx-auto" />
                 </div>
-              </>
+              ))
+            )}
+            {!coveredIds && coverage && (
+              <div className="flex items-center gap-2 text-xs text-slate-500 ml-2">
+                <Loader2 size={12} className="animate-spin text-brand-green" />
+                Coloreando celdas...
+              </div>
             )}
             <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 shrink-0">
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-brand-green/60 inline-block" /> Cubierta</span>
@@ -1703,26 +1712,26 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
             )}
           </div>
 
-          {/* Matrix grid — GPU-promoted scroll container, no transition-all on cells */}
+          {/* Matrix grid — single scroll container (x+y), no contain:strict/size */}
           <div
-            className="overflow-x-auto border border-a3sec-border rounded-lg bg-a3sec-deeper"
-            style={{ maxHeight: '55vh', willChange: 'scroll-position', contain: 'strict' }}
+            className="overflow-auto border border-a3sec-border rounded-lg bg-a3sec-deeper"
+            style={{ maxHeight: '52vh' }}
           >
-            <div className="flex min-w-max h-full">
+            <div className="flex min-w-max">
               {matrix.tactics.map(tactic => {
                 const techniques = matrix.techniques_by_tactic[tactic.id] || [];
                 const tacticCovered = coveredIds
                   ? techniques.filter(t => coveredIds.has(t.id.toUpperCase())).length
                   : null;
                 return (
-                  <div key={tactic.id} className="w-36 flex-shrink-0 border-r border-a3sec-muted last:border-r-0 flex flex-col">
-                    <div className="p-2 text-center border-b border-a3sec-muted bg-a3sec-muted sticky top-0 z-10 shrink-0">
+                  <div key={tactic.id} className="w-36 flex-shrink-0 border-r border-a3sec-muted last:border-r-0">
+                    <div className="p-2 text-center border-b border-a3sec-muted bg-a3sec-muted sticky top-0 z-10">
                       <div className="text-[10px] font-bold text-white leading-tight line-clamp-2">{tactic.name}</div>
                       <div className="text-[9px] text-slate-400 mt-0.5">
                         {tacticCovered !== null ? `${tacticCovered}/${techniques.length}` : `—/${techniques.length}`}
                       </div>
                     </div>
-                    <div className="p-1 space-y-1 overflow-y-auto flex-1" style={{ contain: 'content' }}>
+                    <div className="p-1 space-y-1">
                       {techniques.map(tech => {
                         const covered = coveredIds ? coveredIds.has(tech.id.toUpperCase()) : null;
                         const isSelected = selectedTech?.id === tech.id;
@@ -1757,14 +1766,16 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
           </div>
 
           {/* Selected technique info */}
-          {selectedTech && coveredIds && (
+          {selectedTech && (
             <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-mono font-bold text-brand-green">{selectedTech.id}</span>
                 <span className="text-sm text-white font-medium">{selectedTech.name}</span>
-                {coveredIds.has(selectedTech.id.toUpperCase())
-                  ? <span className="text-[10px] bg-brand-green/10 text-brand-green border border-brand-green/20 px-2 py-0.5 rounded-full">Cubierta por reglas del cliente</span>
-                  : <span className="text-[10px] bg-red-900/20 text-red-400 border border-red-800/30 px-2 py-0.5 rounded-full">Sin cobertura para este cliente</span>
+                {coveredIds
+                  ? coveredIds.has(selectedTech.id.toUpperCase())
+                    ? <span className="text-[10px] bg-brand-green/10 text-brand-green border border-brand-green/20 px-2 py-0.5 rounded-full">Cubierta</span>
+                    : <span className="text-[10px] bg-red-900/20 text-red-400 border border-red-800/30 px-2 py-0.5 rounded-full">Sin cobertura</span>
+                  : <span className="text-[10px] text-slate-500 animate-pulse">Verificando...</span>
                 }
               </div>
               <button onClick={() => setSelectedTech(null)} className="text-slate-500 hover:text-slate-300 shrink-0">
