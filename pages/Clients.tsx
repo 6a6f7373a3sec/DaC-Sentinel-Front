@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { toPng } from 'html-to-image';
 import { api, resolveRuleStatus } from '../services/api';
 import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource, RuleOverride } from '../services/api';
 import { FilterOptions, MitreMatrixResponse } from '../types';
@@ -6,7 +7,7 @@ import {
   Building2, Plus, Edit2, Trash2, Shield, BarChart3, AlertTriangle,
   GitCompare, Loader2, XCircle, ExternalLink, X, ChevronDown, ChevronRight,
   List, Filter, Search, Save, MessageSquare, ChevronLeft, Undo2,
-  LayoutGrid, ImageIcon, Upload,
+  LayoutGrid, ImageIcon, Upload, Download, FileText,
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { COLORS } from '../constants';
@@ -33,9 +34,30 @@ const STATUS_LABEL: Record<ServiceStatus, string> = Object.fromEntries(
 
 // ─── Helpers ────────────────────────────────────────────────
 const priorityColors = {
-  high: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-500' },
-  medium: { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200', dot: 'bg-yellow-500' },
-  low: { bg: 'bg-brand-green/10', text: 'text-brand-green', border: 'border-brand-green/20', dot: 'bg-brand-green/100' },
+  high: {
+    bg: 'bg-red-50',
+    text: 'text-red-800',
+    border: 'border-red-200',
+    dot: 'bg-red-500',
+    name: 'text-slate-800',
+    subtext: 'text-slate-600',
+  },
+  medium: {
+    bg: 'bg-amber-50',
+    text: 'text-amber-900',
+    border: 'border-amber-200',
+    dot: 'bg-amber-500',
+    name: 'text-slate-800',
+    subtext: 'text-slate-600',
+  },
+  low: {
+    bg: 'bg-brand-green/10',
+    text: 'text-brand-green',
+    border: 'border-brand-green/20',
+    dot: 'bg-brand-green',
+    name: 'text-white',
+    subtext: 'text-slate-400',
+  },
 };
 
 const filterSummary = (filters: Record<string, any>): string => {
@@ -71,6 +93,7 @@ export const Clients: React.FC = () => {
   const [gapsModal, setGapsModal] = useState<ClientProfile | null>(null);
   const [compareModal, setCompareModal] = useState<ClientProfile | null>(null);
   const [mitreMatrixModal, setMitreMatrixModal] = useState<ClientProfile | null>(null);
+  const [reportModal, setReportModal] = useState<ClientProfile | null>(null);
 
   const loadClients = useCallback(async () => {
     try {
@@ -182,6 +205,13 @@ export const Clients: React.FC = () => {
                     <LayoutGrid size={14} /> Matriz MITRE
                   </button>
                   <button
+                    onClick={() => setReportModal(client)}
+                    className="px-3 py-1.5 text-xs font-medium border border-brand-green/40 text-brand-green rounded-lg hover:bg-brand-green/10 flex items-center gap-1"
+                    aria-label={`Reporte ejecutivo de ${client.name}`}
+                  >
+                    <FileText size={14} /> Reporte
+                  </button>
+                  <button
                     onClick={() => setRulesModal(client)}
                     className="px-3 py-1.5 text-xs font-medium border border-brand-green/40 text-brand-green rounded-lg hover:bg-brand-green/10 flex items-center gap-1"
                     aria-label={`Ver reglas de ${client.name}`}
@@ -264,6 +294,9 @@ export const Clients: React.FC = () => {
       )}
       {mitreMatrixModal && (
         <ClientMitreModal client={mitreMatrixModal} onClose={() => setMitreMatrixModal(null)} />
+      )}
+      {reportModal && (
+        <ClientReportModal client={reportModal} onClose={() => setReportModal(null)} />
       )}
     </div>
   );
@@ -1204,7 +1237,27 @@ const RulesModal: React.FC<{
   const hasPending = Object.keys(pendingOverrides).length > 0;
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Reglas — ${client.name}`} size="2xl">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title={`Reglas — ${client.name}`}
+      size="2xl"
+      footer={hasPending ? (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-brand-green font-medium">
+            {Object.keys(pendingOverrides).length} override(s) pendiente(s)
+          </span>
+          <button
+            onClick={saveOverrides}
+            disabled={savingOverrides}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-green text-a3sec-dark rounded-lg hover:bg-brand-green/90 disabled:opacity-50"
+          >
+            {savingOverrides ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+            {savingOverrides ? 'Guardando...' : 'Guardar overrides'}
+          </button>
+        </div>
+      ) : undefined}
+    >
       <div className="space-y-4">
         {/* ── Global stats (realtime, delta applied for visible-page overrides) ── */}
         {liveGlobalStats && (
@@ -1421,22 +1474,6 @@ const RulesModal: React.FC<{
           </>
         )}
 
-        {/* ── Save overrides bar ── */}
-        {hasPending && (
-          <div className="flex items-center justify-between p-3 bg-brand-green/10 border border-brand-green/30 rounded-lg">
-            <span className="text-xs text-brand-green font-medium">
-              {Object.keys(pendingOverrides).length} override(s) pendiente(s)
-            </span>
-            <button
-              onClick={saveOverrides}
-              disabled={savingOverrides}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-brand-green text-a3sec-dark rounded-lg hover:bg-brand-green/90 disabled:opacity-50"
-            >
-              {savingOverrides ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
-              {savingOverrides ? 'Guardando...' : 'Guardar overrides'}
-            </button>
-          </div>
-        )}
       </div>
     </Modal>
   );
@@ -1530,7 +1567,7 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
           )}
 
           {/* Gap list */}
-          <div className="max-h-[50vh] overflow-y-auto space-y-2 pr-1">
+          <div className="space-y-2">
             {filteredGaps
               .sort((a: any, b: any) => {
                 const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
@@ -1550,9 +1587,9 @@ const GapsModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ c
                       <div>
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-bold ${pc.text}`}>{gap.id}</span>
-                          <span className="text-sm font-medium text-white">{gap.name}</span>
+                          <span className={`text-sm font-medium ${pc.name}`}>{gap.name}</span>
                         </div>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                        <div className={`flex items-center gap-2 mt-1 text-xs ${pc.subtext}`}>
                           {gap.total_subtechniques > 0 && (
                             <span>{gap.covered_subtechniques}/{gap.total_subtechniques} sub-técnicas cubiertas</span>
                           )}
@@ -1591,6 +1628,28 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedTech, setSelectedTech] = useState<{ id: string; name: string } | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const matrixRef = useRef<HTMLDivElement>(null);
+
+  const handleExportPng = async () => {
+    if (!matrixRef.current) return;
+    setExporting(true);
+    try {
+      const dataUrl = await toPng(matrixRef.current, {
+        pixelRatio: 2,
+        backgroundColor: '#0b1120',
+        style: { overflow: 'visible' },
+      });
+      const link = document.createElement('a');
+      link.download = `mitre-matrix-${client.name.replace(/\s+/g, '-')}-${new Date().toISOString().slice(0, 10)}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      console.error('Export PNG failed', e);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   useEffect(() => {
     const techPattern = /T\d{4}(?:\.\d{3})?/i;
@@ -1701,6 +1760,15 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
             <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 shrink-0">
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-brand-green/60 inline-block" /> Cubierta</span>
               <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-a3sec-muted inline-block" /> No cubierta</span>
+              <button
+                onClick={handleExportPng}
+                disabled={exporting || !coveredIds}
+                className="flex items-center gap-1 px-2 py-1 rounded bg-a3sec-surface hover:bg-a3sec-muted text-slate-300 hover:text-white disabled:opacity-40 transition-colors"
+                title="Exportar matriz como PNG"
+              >
+                {exporting ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                PNG
+              </button>
             </div>
           </div>
 
@@ -1717,7 +1785,7 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
             className="overflow-auto border border-a3sec-border rounded-lg bg-a3sec-deeper"
             style={{ maxHeight: '52vh' }}
           >
-            <div className="flex min-w-max">
+            <div ref={matrixRef} className="flex min-w-max">
               {matrix.tactics.map(tactic => {
                 const techniques = matrix.techniques_by_tactic[tactic.id] || [];
                 const tacticCovered = coveredIds
@@ -1790,6 +1858,271 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
 };
 
 // ─── Compare Modal ──────────────────────────────────────────
+// ─── Executive Report Modal ──────────────────────────────────
+const PRIORITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+const PRIORITY_LABEL_ES: Record<string, string> = { high: 'Alta', medium: 'Media', low: 'Baja' };
+const PRIORITY_COLOR_CLASS: Record<string, string> = {
+  high: 'text-red-400',
+  medium: 'text-yellow-400',
+  low: 'text-green-400',
+};
+
+const ClientReportModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
+  const [coverage, setCoverage] = useState<ClientCoverage | null>(null);
+  const [gaps, setGaps] = useState<ClientGaps | null>(null);
+  const [compare, setCompare] = useState<ClientCompare | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    Promise.all([
+      api.getClientCoverage(client.id),
+      api.getClientGaps(client.id),
+      api.getClientCompare(client.id),
+    ])
+      .then(([cov, gps, cmp]) => { setCoverage(cov); setGaps(gps); setCompare(cmp); })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [client.id]);
+
+  const today = new Date().toLocaleDateString('es-AR', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const topGaps = gaps
+    ? Object.entries(gaps.gaps_by_tactic)
+        .flatMap(([tactic, techs]) => (techs as any[]).map(t => ({ ...t, tactic })))
+        .sort((a, b) => (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2))
+        .slice(0, 10)
+    : [];
+
+  const handlePrint = () => {
+    const el = document.getElementById('report-printable');
+    if (!el) return;
+    const win = window.open('', '_blank', 'width=960,height=800');
+    if (!win) { window.print(); return; }
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte — ${client.name}</title><style>
+      *{box-sizing:border-box;margin:0;padding:0}
+      body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1e293b;background:#fff;padding:40px;font-size:13px;line-height:1.5}
+      h1{font-size:22px;font-weight:700}h2{font-size:15px;font-weight:600;margin-bottom:10px;border-bottom:1px solid #e2e8f0;padding-bottom:4px}
+      .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+      .kpi{border:1px solid #e2e8f0;border-radius:8px;padding:12px;text-align:center}
+      .kpi .val{font-size:24px;font-weight:700}.kpi .lbl{font-size:11px;color:#64748b;margin-top:2px}
+      .green{color:#16a34a}.red{color:#dc2626}.blue{color:#2563eb}
+      .bar-row{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+      .bar-label{width:160px;font-size:11px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .bar-track{flex:1;background:#f1f5f9;border-radius:4px;height:12px;overflow:hidden}
+      .bar-fill{height:100%;border-radius:4px}
+      .bar-pct{width:60px;text-align:right;font-size:11px;color:#64748b}
+      table{width:100%;border-collapse:collapse;font-size:12px}
+      th{background:#f8fafc;padding:6px 10px;text-align:left;font-weight:600;border:1px solid #e2e8f0}
+      td{padding:6px 10px;border:1px solid #e2e8f0}
+      .section{margin-bottom:24px}
+      .header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:24px;padding-bottom:16px;border-bottom:2px solid #e2e8f0}
+      .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:10px;border:1px solid #e2e8f0}
+      .tag-high{color:#dc2626}.tag-medium{color:#d97706}.tag-low{color:#16a34a}
+      .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      .profile-item{border:1px solid #e2e8f0;border-radius:6px;padding:10px}
+      .profile-item .key{font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
+      .profile-item .val2{font-size:13px;font-weight:600;margin-top:2px}
+    </style></head><body>${el.innerHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 300);
+  };
+
+  const footer = (
+    <button
+      onClick={handlePrint}
+      className="flex items-center gap-2 px-4 py-2 bg-brand-green text-white font-semibold text-sm rounded-lg hover:bg-brand-green/90"
+    >
+      <Download size={14} /> Imprimir / Exportar PDF
+    </button>
+  );
+
+  return (
+    <Modal isOpen={true} onClose={onClose} title={`Reporte Ejecutivo — ${client.name}`} size="3xl" footer={footer}>
+      {loading ? (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="animate-spin text-brand-green mr-3" size={24} />
+          <span className="text-sm text-slate-400">Generando reporte...</span>
+        </div>
+      ) : error ? (
+        <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-4 text-red-400 text-sm">{error}</div>
+      ) : coverage && gaps && compare ? (
+        <div id="report-printable" className="space-y-6 text-slate-200">
+
+          {/* ── Header ── */}
+          <div className="flex items-start justify-between gap-4 pb-4 border-b border-a3sec-border">
+            <div className="flex items-center gap-3">
+              {client.filters?.logo_url && (
+                <img src={client.filters.logo_url} alt="" className="w-12 h-12 rounded-lg object-cover border border-a3sec-border" />
+              )}
+              <div>
+                <h1 className="text-xl font-bold text-white">{client.name}</h1>
+                {client.description && <p className="text-sm text-slate-400 mt-0.5">{client.description}</p>}
+              </div>
+            </div>
+            <div className="text-right text-xs text-slate-500 shrink-0">
+              <div className="text-slate-400 font-medium">{today}</div>
+              <div className="mt-0.5">MITRE ATT&amp;CK {coverage.domain} v{coverage.version}</div>
+              <div className="mt-0.5">{client.rule_count.toLocaleString()} reglas activas</div>
+            </div>
+          </div>
+
+          {/* ── KPIs ── */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 bg-brand-green/10 border border-brand-green/20 rounded-lg text-center">
+              <div className="text-2xl font-bold text-brand-green">{coverage.coverage_percentage.toFixed(1)}%</div>
+              <div className="text-xs text-brand-green font-medium mt-0.5">Cobertura</div>
+            </div>
+            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center">
+              <div className="text-2xl font-bold text-white">{coverage.covered_techniques}</div>
+              <div className="text-xs text-slate-500 font-medium mt-0.5">Cubiertas</div>
+            </div>
+            <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center">
+              <div className="text-2xl font-bold text-slate-300">{coverage.total_techniques}</div>
+              <div className="text-xs text-slate-500 font-medium mt-0.5">Total técnicas</div>
+            </div>
+            <div className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg text-center">
+              <div className="text-2xl font-bold text-red-400">{coverage.uncovered_count}</div>
+              <div className="text-xs text-red-500 font-medium mt-0.5">Sin cubrir</div>
+            </div>
+          </div>
+
+          {/* ── Cobertura por Táctica ── */}
+          <div>
+            <h2 className="text-sm font-semibold text-slate-300 mb-3">Cobertura por Táctica</h2>
+            <div className="space-y-2">
+              {Object.entries(coverage.by_tactic)
+                .sort((a: [string, any], b: [string, any]) => (b[1].percentage || 0) - (a[1].percentage || 0))
+                .map(([tactic, info]: [string, any]) => (
+                  <div key={tactic} className="flex items-center gap-3">
+                    <div className="w-44 text-xs text-slate-400 truncate" title={info.name || tactic}>
+                      {(info.name || tactic).replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())}
+                    </div>
+                    <div className="flex-1 bg-a3sec-dark rounded-full h-4 overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.max(info.percentage || 0, 1)}%`,
+                          backgroundColor: (info.percentage || 0) > 50 ? COLORS.success : (info.percentage || 0) > 25 ? COLORS.warning : COLORS.danger,
+                        }}
+                      />
+                    </div>
+                    <div className="w-24 text-right text-xs font-semibold text-slate-400">
+                      {(info.percentage || 0).toFixed(0)}% <span className="font-normal">({info.covered}/{info.total})</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+
+          {/* ── Gaps Prioritarios ── */}
+          <div>
+            <h2 className="text-sm font-semibold text-slate-300 mb-3">Gaps Prioritarios</h2>
+            <div className="flex gap-3 mb-3">
+              {(['high', 'medium', 'low'] as const).map(p => (
+                <div key={p} className="flex items-center gap-1.5 text-sm">
+                  <span className={`font-bold text-lg ${PRIORITY_COLOR_CLASS[p]}`}>{gaps.priority_summary[p]}</span>
+                  <span className="text-slate-500 text-xs">{PRIORITY_LABEL_ES[p]}</span>
+                </div>
+              ))}
+              <span className="text-slate-600 text-xs ml-auto self-center">Total: {gaps.total_gaps} técnicas sin cubrir</span>
+            </div>
+            {topGaps.length > 0 && (
+              <div className="border border-a3sec-border rounded-lg overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-a3sec-deeper text-slate-400">
+                      <th className="px-3 py-2 text-left font-medium">Técnica</th>
+                      <th className="px-3 py-2 text-left font-medium">Táctica</th>
+                      <th className="px-3 py-2 text-left font-medium">Prioridad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topGaps.map((g: any) => (
+                      <tr key={g.id} className="border-t border-a3sec-border hover:bg-a3sec-deeper/50">
+                        <td className="px-3 py-2">
+                          <span className="font-mono text-slate-500 mr-2">{g.id}</span>
+                          <span className="text-slate-300">{g.name}</span>
+                        </td>
+                        <td className="px-3 py-2 text-slate-400 capitalize">{g.tactic.replace(/-/g, ' ')}</td>
+                        <td className={`px-3 py-2 font-semibold ${PRIORITY_COLOR_CLASS[g.priority]}`}>
+                          {PRIORITY_LABEL_ES[g.priority]}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ── Perfil del Cliente ── */}
+          <div>
+            <h2 className="text-sm font-semibold text-slate-300 mb-3">Perfil del Cliente</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+              <div className="bg-a3sec-deeper border border-a3sec-border rounded-lg p-3">
+                <div className="text-slate-500 uppercase tracking-wide text-[10px] mb-1">Nivel mínimo</div>
+                <div className="font-semibold text-white capitalize">{client.filters?.min_level || '—'}</div>
+              </div>
+              <div className="bg-a3sec-deeper border border-a3sec-border rounded-lg p-3">
+                <div className="text-slate-500 uppercase tracking-wide text-[10px] mb-1">Reglas activas</div>
+                <div className="font-semibold text-white">{client.rule_count.toLocaleString()}</div>
+              </div>
+              <div className="bg-a3sec-deeper border border-a3sec-border rounded-lg p-3">
+                <div className="text-slate-500 uppercase tracking-wide text-[10px] mb-1">Overrides</div>
+                <div className="font-semibold text-white">{Object.keys(client.filters?.rule_overrides || {}).length}</div>
+              </div>
+            </div>
+            {client.filters?.product_status && Object.keys(client.filters.product_status).length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {Object.entries(client.filters.product_status as Record<string, ProductStatusEntry>).map(([p, e]) => {
+                  const opt = SERVICE_STATUS_OPTIONS.find(o => o.value === e.status);
+                  return (
+                    <span key={p} className="inline-flex items-center gap-1.5 text-xs px-2 py-1 bg-a3sec-deeper border border-a3sec-border rounded-full">
+                      <span className={`w-1.5 h-1.5 rounded-full ${opt?.dot || 'bg-slate-400'}`} />
+                      <span className="text-slate-300">{p}</span>
+                      <span className="text-slate-500 text-[10px] capitalize">{STATUS_LABEL[e.status]}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── Comparación vs Global ── */}
+          <div>
+            <h2 className="text-sm font-semibold text-slate-300 mb-3">Comparación vs Cobertura Global</h2>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 bg-brand-green/10 border border-brand-green/20 rounded-lg text-center">
+                <div className="text-xl font-bold text-brand-green">{compare.client_coverage.toFixed(1)}%</div>
+                <div className="text-xs text-slate-500 mt-0.5">Este cliente</div>
+              </div>
+              <div className="p-3 bg-a3sec-deeper border border-a3sec-border rounded-lg text-center">
+                <div className="text-xl font-bold text-slate-300">{compare.global_coverage.toFixed(1)}%</div>
+                <div className="text-xs text-slate-500 mt-0.5">Cobertura global</div>
+              </div>
+              <div className={`p-3 rounded-lg border text-center ${compare.delta >= 0 ? 'bg-green-900/20 border-green-800/30' : 'bg-red-900/20 border-red-800/30'}`}>
+                <div className={`text-xl font-bold ${compare.delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {compare.delta > 0 ? '+' : ''}{compare.delta.toFixed(1)}%
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">Delta</div>
+              </div>
+            </div>
+            {compare.recommendation && (
+              <div className="mt-3 bg-amber-900/20 border border-amber-800/30 rounded-lg p-3 flex items-start gap-2">
+                <Shield className="text-amber-400 mt-0.5 shrink-0" size={14} />
+                <p className="text-xs text-amber-300">{compare.recommendation}</p>
+              </div>
+            )}
+          </div>
+
+        </div>
+      ) : null}
+    </Modal>
+  );
+};
+
 const CompareModal: React.FC<{ client: ClientProfile; onClose: () => void }> = ({ client, onClose }) => {
   const [data, setData] = useState<ClientCompare | null>(null);
   const [loading, setLoading] = useState(true);

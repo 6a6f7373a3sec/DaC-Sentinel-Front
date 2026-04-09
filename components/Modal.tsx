@@ -6,12 +6,13 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   /** Disable backdrop blur for heavy/matrix modals (GPU cost on scroll) */
   noBlur?: boolean;
 }
 
-export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 'md', noBlur = false }) => {
+export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, footer, size = 'md', noBlur = false }) => {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -57,9 +58,14 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
           </button>
         </div>
         
-        <div className="p-6 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 min-h-0 p-6 overflow-y-auto custom-scrollbar">
           {children}
         </div>
+        {footer && (
+          <div className="shrink-0 px-6 py-4 border-t border-a3sec-border">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );
