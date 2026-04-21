@@ -556,6 +556,10 @@ const ClientFormModal: React.FC<{
     if (statuses.length) filters.statuses = statuses;
     if (repoSourceIds.length) filters.repo_source_ids = repoSourceIds;
     if (logoUrl.trim()) filters.logo_url = logoUrl.trim();
+    // Preserve rule_overrides set via RulesModal — editing the profile must not wipe them
+    if (editing?.filters?.rule_overrides && Object.keys(editing.filters.rule_overrides).length) {
+      filters.rule_overrides = editing.filters.rule_overrides;
+    }
 
     try {
       if (editing) {
@@ -1654,8 +1658,22 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
   useEffect(() => {
     const techPattern = /T\d{4}(?:\.\d{3})?/i;
 
+    const productStatus: Record<string, ProductStatusEntry> = client.filters?.product_status || {};
+    const overrides: Record<string, RuleOverride> = client.filters?.rule_overrides || {};
+    const hasProductStatus = Object.keys(productStatus).length > 0;
+
     const extractIds = (items: any[], target: Set<string>) => {
       for (const rule of items) {
+        // Mirror backend _resolve_rule_status: only count rules that are effectively 'implemented'
+        if (hasProductStatus) {
+          const resolved = resolveRuleStatus(
+            { logsource_product: rule.product, logsource_service: rule.service || rule.logsource_service },
+            productStatus,
+            overrides,
+            rule.id,
+          );
+          if (resolved.status !== 'implemented') continue;
+        }
         let atkIds: string[] = [];
         try { atkIds = JSON.parse(rule.attack_ids || '[]'); } catch {
           atkIds = (rule.attack_ids || '').split(',').map((s: string) => s.trim());
@@ -1776,7 +1794,7 @@ const ClientMitreModal: React.FC<{ client: ClientProfile; onClose: () => void }>
           <div className="text-[10px] text-slate-500 bg-a3sec-deeper border border-a3sec-border rounded-lg px-3 py-2">
             Basado en: <span className="text-slate-400">{filterSummary(client.filters)}</span>
             {client.filters?.rule_overrides && Object.keys(client.filters.rule_overrides).length > 0 && (
-              <span className="ml-2 text-yellow-500">· {Object.keys(client.filters.rule_overrides).length} override(s) activo(s) <span className="text-slate-600">(no reflejados en esta vista)</span></span>
+              <span className="ml-2 text-yellow-500">· {Object.keys(client.filters.rule_overrides).length} override(s) activo(s)</span>
             )}
           </div>
 
