@@ -5,6 +5,7 @@ import {
   FolderOpen, Search, X, ChevronLeft, ChevronRight, Database,
 } from 'lucide-react';
 import { readConverterHandoff } from '../hooks/useConverterHandoff';
+import { sanitizePipelineYaml } from '../utils/pipelineSanitizer';
 import { Modal } from '../components/Modal';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -309,8 +310,9 @@ export const SigmaConverter: React.FC = () => {
   const [result, setResult]   = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<ConvertError | null>(null);
-  const [copied, setCopied]   = useState(false);
+  const [copied, setCopied]           = useState(false);
   const [loadingMeta, setLoadingMeta] = useState(true);
+  const [pipelineWarning, setPipelineWarning] = useState<string[] | null>(null);
 
   // Load targets once
   useEffect(() => {
@@ -397,6 +399,13 @@ export const SigmaConverter: React.FC = () => {
     setLoading(true);
     setError(null);
     setResult('');
+    setPipelineWarning(null);
+
+    // Normalizar pipeline YAML legacy → pySigma antes de enviar
+    const sanitized = sanitizePipelineYaml(pipelineYaml);
+    if (sanitized.wasModified) setPipelineWarning(sanitized.removedKeys);
+    const effectivePipelineYaml = sanitized.yaml;
+
     try {
       let res: { result: string };
       if (selectedRuleId !== null) {
@@ -406,17 +415,16 @@ export const SigmaConverter: React.FC = () => {
           target,
           format: format || undefined,
           pipeline: selPipelines.length ? selPipelines : undefined,
-          pipeline_yaml: pipelineYaml.trim() || undefined,
+          pipeline_yaml: effectivePipelineYaml.trim() || undefined,
           html_escape: htmlEscape,
         });
       } else {
-        // Classic path: send raw YAML
         res = await api.convertSigmaRule({
           rule,
           target,
           format: format || undefined,
           pipeline: selPipelines.length ? selPipelines : undefined,
-          pipeline_yaml: pipelineYaml.trim() || undefined,
+          pipeline_yaml: effectivePipelineYaml.trim() || undefined,
           html_escape: htmlEscape,
         });
       }
@@ -518,7 +526,13 @@ export const SigmaConverter: React.FC = () => {
             {/* Custom pipeline YAML */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">
-                Pipeline custom (YAML) <span className="text-slate-400 font-normal">— opcional, formato pySigma</span>
+                Pipeline custom (YAML)
+              <span className="text-slate-400 font-normal ml-1">— opcional, formato pySigma</span>
+              {pipelineWarning && (
+                <span className="ml-2 text-[10px] font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
+                  normalizado · eliminadas: {pipelineWarning.join(', ')}
+                </span>
+              )}
               </label>
               <textarea
                 rows={3}
