@@ -2,6 +2,8 @@
 // For local dev without docker: use http://localhost:8000/api/v1
 export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
+export const AUTH_LOGIN_FLASH_KEY = 'dac.auth.login_flash';
+
 export const COLORS = {
   primary: '#99D1C5',   // brand green
   secondary: '#928FC5', // brand purple

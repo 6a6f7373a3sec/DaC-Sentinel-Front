@@ -31,6 +31,42 @@ export interface GitRepoSource {
   created_at: string;
 }
 
+export interface RepoUpdatePayload {
+  name?: string;
+  branch?: string;
+  rules_subpath?: string;
+  is_active?: boolean;
+}
+
+export interface ExportJobSummary {
+  job_id?: string;
+  id?: string;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+  download_url?: string;
+  message?: string;
+  error?: string | null;
+  [key: string]: any;
+}
+
+export interface ExportJobsResponse {
+  items?: ExportJobSummary[];
+  jobs?: ExportJobSummary[];
+  total?: number;
+}
+
+export interface SystemSettingsReloadResponse {
+  reloaded: boolean;
+  reloaded_at: string;
+  snapshot: Record<string, any>;
+}
+
+export interface ChangePasswordResponse {
+  reauth_required?: boolean;
+  message?: string;
+}
+
 export type ServiceStatus = 'implemented' | 'not_implemented' | 'na' | 'planned' | 'in_progress';
 
 export interface ProductStatusEntry {
@@ -55,6 +91,8 @@ export interface ClientProfile {
   rule_count: number;
   created_at: string;
   updated_at: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
 }
 
 /** Resolves the effective status of a rule based on product_status config */
@@ -120,6 +158,103 @@ export interface ClientCompare {
   recommendation: string;
 }
 
+export interface ClientRuleItem {
+  id: number;
+  path: string;
+  title: string;
+  level: string;
+  status: string;
+  product: string;
+  service?: string;
+  logsource_service?: string;
+  category: string;
+  attack_ids: string;
+}
+
+export interface ClientRulesResponse {
+  client_id: number;
+  client_name: string;
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  items: ClientRuleItem[];
+}
+
+export interface ClientPipeline {
+  id: number;
+  client_id: number;
+  rule_id: number;
+  pipeline_name: string;
+  target_backend: string;
+  target_format: string;
+  position: number;
+  pipeline_yaml: string;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+  warning?: string | null;
+}
+
+export interface ClientPipelinesResponse {
+  items: ClientPipeline[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface ClientPipelineCreatePayload {
+  rule_id: number;
+  pipeline_name: string;
+  pipeline_yaml: string;
+  target_backend: string;
+  target_format: string;
+  position: number;
+}
+
+export type ClientPipelineUpdatePayload = Partial<Omit<ClientPipelineCreatePayload, 'rule_id'>>;
+
+export interface ClientRuleConversionResult {
+  client_id: number;
+  rule_id: number;
+  backend: string;
+  format: string;
+  pipelines_used: number;
+  result: string;
+  warning?: string | null;
+}
+
+export interface ClientBatchConversionItem {
+  rule_id: number;
+  title: string;
+  result: string | null;
+  error: string | null;
+}
+
+export interface ClientBatchConversionResult {
+  client_id: number;
+  total_rules: number;
+  success_count: number;
+  error_count: number;
+  results: ClientBatchConversionItem[];
+}
+
+export interface SigmaTargetOption {
+  name: string;
+  description: string;
+}
+
+export interface SigmaFormatOption {
+  name: string;
+  description: string;
+  target?: string;
+}
+
+export interface SigmaPipelineOption {
+  name: string;
+  targets: string[];
+}
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,
@@ -142,17 +277,22 @@ class ApiService {
     return headers;
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit & { logoutOnUnauthorized?: boolean } = {}
+  ): Promise<T> {
+    const { logoutOnUnauthorized = true, ...fetchOptions } = options;
+
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
+      ...fetchOptions,
       headers: {
         ...this.getHeaders(),
-        ...options.headers,
+        ...fetchOptions.headers,
       },
     });
 
     if (!response.ok) {
-      if (response.status === 401) {
+      if (response.status === 401 && logoutOnUnauthorized) {
         localStorage.removeItem('access_token');
         localStorage.removeItem('user');
         window.location.hash = '#/login';
@@ -197,6 +337,17 @@ class ApiService {
 
   async getMe(): Promise<User> {
     return this.request<User>('/auth/me');
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<ChangePasswordResponse> {
+    return this.request<ChangePasswordResponse>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+      logoutOnUnauthorized: false,
+    });
   }
 
   // Dev-only: reset a user's password directly (backend must enable DAC_ALLOW_DEV_PASSWORD_RESET)
@@ -558,6 +709,13 @@ class ApiService {
     return this.request(`/admin/repos/${id}`);
   }
 
+  async updateRepo(id: number, data: RepoUpdatePayload): Promise<GitRepoSource> {
+    return this.request<GitRepoSource>(`/admin/repos/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
   async deleteRepo(id: number): Promise<void> {
     return this.request(`/admin/repos/${id}`, { method: 'DELETE' });
   }
@@ -566,9 +724,20 @@ class ApiService {
     return this.request(`/admin/repos/${id}/sync`, { method: 'POST' });
   }
 
+  async listExportJobs(): Promise<ExportJobsResponse | ExportJobSummary[]> {
+    return this.request<ExportJobsResponse | ExportJobSummary[]>('/export/jobs');
+  }
+
+  async reloadSettings(): Promise<SystemSettingsReloadResponse> {
+    return this.request<SystemSettingsReloadResponse>('/admin/system/settings/reload', { method: 'POST' });
+  }
+
   // --- Phase C: Client Profiles ---
-  async listClients(): Promise<{ items: ClientProfile[]; total: number }> {
-    return this.request('/clients');
+  async listClients(
+    options: { includeDeleted?: boolean } = {}
+  ): Promise<{ items: ClientProfile[]; total: number }> {
+    const params = options.includeDeleted ? '?include_deleted=true' : '';
+    return this.request(`/clients${params}`);
   }
 
   async createClient(data: { name: string; description?: string; filters: Record<string, any> }): Promise<ClientProfile> {
@@ -593,6 +762,10 @@ class ApiService {
     return this.request(`/clients/${id}`, { method: 'DELETE' });
   }
 
+  async restoreClient(id: number): Promise<ClientProfile> {
+    return this.request<ClientProfile>(`/clients/${id}/restore`, { method: 'POST' });
+  }
+
   async getClientCoverage(id: number, domain = 'enterprise'): Promise<ClientCoverage> {
     return this.request<ClientCoverage>(`/clients/${id}/coverage?domain=${domain}`);
   }
@@ -600,11 +773,7 @@ class ApiService {
   async getClientRules(
     id: number,
     params: { q?: string; product?: string; page?: number; page_size?: number } = {},
-  ): Promise<{
-    client_id: number; client_name: string; total: number; page: number; page_size: number;
-    total_pages: number;
-    items: { id: number; path: string; title: string; level: string; status: string; product: string; service?: string; logsource_service?: string; category: string; attack_ids: string }[];
-  }> {
+  ): Promise<ClientRulesResponse> {
     const qs = new URLSearchParams();
     const { q, product, page = 1, page_size = 20 } = params;
     if (q) qs.set('q', q);
@@ -632,19 +801,69 @@ class ApiService {
     return this.request<ClientCompare>(`/clients/${id}/compare?domain=${domain}`);
   }
 
+  async listClientPipelines(
+    clientId: number,
+    params: { rule_id?: number; page?: number; page_size?: number } = {},
+  ): Promise<ClientPipelinesResponse> {
+    const qs = new URLSearchParams();
+    const { rule_id, page = 1, page_size = 20 } = params;
+    if (typeof rule_id === 'number') qs.set('rule_id', String(rule_id));
+    qs.set('page', String(page));
+    qs.set('page_size', String(page_size));
+    return this.request<ClientPipelinesResponse>(`/clients/${clientId}/pipelines?${qs.toString()}`);
+  }
+
+  async createClientPipeline(clientId: number, payload: ClientPipelineCreatePayload): Promise<ClientPipeline> {
+    return this.request<ClientPipeline>(`/clients/${clientId}/pipelines`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async getClientPipeline(clientId: number, pipelineId: number): Promise<ClientPipeline> {
+    return this.request<ClientPipeline>(`/clients/${clientId}/pipelines/${pipelineId}`);
+  }
+
+  async updateClientPipeline(
+    clientId: number,
+    pipelineId: number,
+    payload: ClientPipelineUpdatePayload,
+  ): Promise<ClientPipeline> {
+    return this.request<ClientPipeline>(`/clients/${clientId}/pipelines/${pipelineId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteClientPipeline(clientId: number, pipelineId: number): Promise<void> {
+    return this.request<void>(`/clients/${clientId}/pipelines/${pipelineId}`, { method: 'DELETE' });
+  }
+
+  async convertClientRule(clientId: number, ruleId: number): Promise<ClientRuleConversionResult> {
+    return this.request<ClientRuleConversionResult>(`/clients/${clientId}/rules/${ruleId}/convert`, {
+      method: 'POST',
+    });
+  }
+
+  async convertAllClientRules(clientId: number): Promise<ClientBatchConversionResult> {
+    return this.request<ClientBatchConversionResult>(`/clients/${clientId}/convert-all`, {
+      method: 'POST',
+    });
+  }
+
   // Sigma Converter
-  async getSigmaTargets(): Promise<{ name: string; description: string }[]> {
-    return this.request('/sigma/targets');
+  async getSigmaTargets(): Promise<SigmaTargetOption[]> {
+    return this.request<SigmaTargetOption[]>('/sigma/targets');
   }
 
-  async getSigmaFormats(target?: string): Promise<{ name: string; description: string; target?: string }[]> {
+  async getSigmaFormats(target?: string): Promise<SigmaFormatOption[]> {
     const qs = target ? `?target=${encodeURIComponent(target)}` : '';
-    return this.request(`/sigma/formats${qs}`);
+    return this.request<SigmaFormatOption[]>(`/sigma/formats${qs}`);
   }
 
-  async getSigmaPipelines(target?: string): Promise<{ name: string; targets: string[] }[]> {
+  async getSigmaPipelines(target?: string): Promise<SigmaPipelineOption[]> {
     const qs = target ? `?target=${encodeURIComponent(target)}` : '';
-    return this.request(`/sigma/pipelines${qs}`);
+    return this.request<SigmaPipelineOption[]>(`/sigma/pipelines${qs}`);
   }
 
   async convertSigmaRule(payload: {

@@ -9,6 +9,7 @@ import { MitreMatrix } from './pages/MitreMatrix';
 import { SigmaConverter } from './pages/SigmaConverter';
 import { Clients } from './pages/Clients';
 import { AdminPanel } from './pages/Admin';
+import { ChangePassword } from './pages/ChangePassword';
 
 interface PrivateRouteProps {
   children: React.ReactNode;
@@ -49,6 +50,7 @@ const AppContent = () => {
        route === '#/mitre' ? <MitreMatrix /> :
        route === '#/converter' ? <SigmaConverter /> :
        route === '#/clients' ? <Clients /> :
+       route === '#/change-password' ? <ChangePassword /> :
        route === '#/admin' ? <AdminPanel /> :
        <Dashboard />}
     </PrivateRoute>

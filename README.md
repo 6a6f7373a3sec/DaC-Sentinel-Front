@@ -49,6 +49,7 @@ src/
 |------|--------|-----------|
 | `#/login` | Login | — |
 | `#/dashboard` | Dashboard | Analyst |
+| `#/change-password` | Cambio de contraseña | Usuario autenticado |
 | `#/rules` | Librería de Reglas | Analyst |
 | `#/generator` | Generador IA | Analyst (guardar: Admin) |
 | `#/mitre` | Matriz MITRE ATT&CK | Analyst |
@@ -120,6 +121,7 @@ npm run build
 2. En cada request, `ApiService` inyecta `Authorization: Bearer <token>`.
 3. HTTP 401 → limpia storage y redirige a `#/login`.
 4. `AuthProvider` valida el token al montar vía `GET /auth/me`.
+5. Un usuario autenticado puede cambiar su contraseña desde `#/change-password` vía `POST /auth/change-password`.
 
 ---
 

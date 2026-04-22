@@ -2,12 +2,14 @@ import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { toPng } from 'html-to-image';
 import { api, resolveRuleStatus } from '../services/api';
 import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource, RuleOverride } from '../services/api';
-import { FilterOptions, MitreMatrixResponse } from '../types';
+import { FilterOptions, MitreMatrixResponse, UserRole } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { ClientPipelinesModal } from '../components/ClientPipelinesModal';
 import {
   Building2, Plus, Edit2, Trash2, Shield, BarChart3, AlertTriangle,
   GitCompare, Loader2, XCircle, ExternalLink, X, ChevronDown, ChevronRight,
   List, Filter, Search, Save, MessageSquare, ChevronLeft, Undo2,
-  LayoutGrid, ImageIcon, Upload, Download, FileText,
+  LayoutGrid, ImageIcon, Upload, Download, FileText, Repeat2,
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { COLORS } from '../constants';
@@ -81,10 +83,33 @@ const filterSummary = (filters: Record<string, any>): string => {
   return parts.length ? parts.join(' • ') : 'Sin filtros (cobertura global)';
 };
 
+// ─── Lifecycle helpers ──────────────────────────────────────
+type LifecycleStatus = 'active' | 'inactive' | 'deleted';
+
+function getLifecycleStatus(c: ClientProfile): LifecycleStatus {
+  if (c.deleted_at != null) return 'deleted';
+  if (c.is_active) return 'active';
+  return 'inactive';
+}
+
+const LIFECYCLE_BADGE: Record<LifecycleStatus, { label: string; className: string }> = {
+  active:   { label: 'Activo',    className: 'px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/20 text-green-300 border border-green-500/30' },
+  inactive: { label: 'Inactivo',  className: 'px-2 py-0.5 rounded-full text-xs font-medium bg-slate-500/20 text-slate-400 border border-slate-500/30' },
+  deleted:  { label: 'Eliminado', className: 'px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30' },
+};
+
 // ─── Main Page ──────────────────────────────────────────────
 export const Clients: React.FC = () => {
+  const { user } = useAuth();
+  const isAdmin = user?.roles.includes(UserRole.ADMIN) ?? false;
+
   const [clients, setClients] = useState<ClientProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+
+  // Derived: single source of truth from clients[]
+  const activeClients = clients.filter((c: ClientProfile) => c.deleted_at == null);
+  const deletedClients = clients.filter((c: ClientProfile) => c.deleted_at != null);
 
   // Modals
   const [formModal, setFormModal] = useState<{ open: boolean; editing: ClientProfile | null }>({ open: false, editing: null });
@@ -94,17 +119,18 @@ export const Clients: React.FC = () => {
   const [compareModal, setCompareModal] = useState<ClientProfile | null>(null);
   const [mitreMatrixModal, setMitreMatrixModal] = useState<ClientProfile | null>(null);
   const [reportModal, setReportModal] = useState<ClientProfile | null>(null);
+  const [pipelinesModal, setPipelinesModal] = useState<ClientProfile | null>(null);
 
   const loadClients = useCallback(async () => {
     try {
-      const res = await api.listClients();
+      const res = await api.listClients({ includeDeleted: isAdmin });
       setClients(res.items);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAdmin]);
 
   useEffect(() => { loadClients(); }, [loadClients]);
 
@@ -115,6 +141,18 @@ export const Clients: React.FC = () => {
       await loadClients();
     } catch (e: any) {
       alert(e.message || 'Error al eliminar');
+    }
+  };
+
+  const handleRestore = async (profile: ClientProfile) => {
+    try {
+      setRestoringId(profile.id);
+      await api.restoreClient(profile.id);
+      await loadClients();
+    } catch (e: any) {
+      alert(e.message || 'Error al restaurar');
+    } finally {
+      setRestoringId(null);
     }
   };
 
@@ -141,7 +179,51 @@ export const Clients: React.FC = () => {
         </button>
       </div>
 
-      {clients.length === 0 ? (
+      {isAdmin && deletedClients.length > 0 && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+          <div className="flex items-start gap-3">
+            <Trash2 size={18} className="text-red-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-red-200">
+                Perfiles eliminados ({deletedClients.length})
+              </div>
+              <div className="mt-3 space-y-2">
+                {deletedClients.map((profile: ClientProfile) => (
+                  <div
+                    key={profile.id}
+                    className="flex flex-col gap-2 rounded-lg border border-red-500/20 bg-a3sec-deeper/60 px-3 py-3 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-white">{profile.name}</div>
+                      {profile.description && (
+                        <div className="text-xs text-slate-400 mt-0.5 truncate">{profile.description}</div>
+                      )}
+                      {profile.deleted_at && (
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          Eliminado el {new Date(profile.deleted_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleRestore(profile)}
+                      disabled={restoringId === profile.id}
+                      className="inline-flex items-center justify-center px-3 py-2 text-xs font-medium border border-red-400/40 text-red-200 rounded-lg hover:bg-red-500/10 disabled:opacity-60"
+                    >
+                      {restoringId === profile.id ? (
+                        <><Loader2 size={14} className="mr-2 animate-spin" /> Restaurando...</>
+                      ) : (
+                        <><Undo2 size={14} className="mr-2" /> Restaurar</>
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeClients.length === 0 ? (
         <div className="bg-a3sec-surface rounded-xl shadow-sm border border-a3sec-border p-12 text-center">
           <Building2 className="mx-auto mb-4 text-slate-300" size={48} />
           <p className="text-slate-500">No hay perfiles de cliente todavía.</p>
@@ -149,7 +231,7 @@ export const Clients: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {clients.map(client => (
+          {activeClients.map((client: ClientProfile) => (
             <div key={client.id} className="bg-a3sec-surface rounded-xl shadow-sm border border-a3sec-border p-5 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -168,8 +250,10 @@ export const Clients: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="text-lg font-bold text-white">{client.name}</h3>
-                      {!client.is_active && (
-                        <span className="text-xs bg-a3sec-dark text-slate-500 px-2 py-0.5 rounded-full">Inactivo</span>
+                      {getLifecycleStatus(client) !== 'active' && (
+                        <span className={LIFECYCLE_BADGE[getLifecycleStatus(client)].className}>
+                          {LIFECYCLE_BADGE[getLifecycleStatus(client)].label}
+                        </span>
                       )}
                     </div>
                     {client.description && <p className="text-sm text-slate-500 mb-2">{client.description}</p>}
@@ -217,6 +301,13 @@ export const Clients: React.FC = () => {
                     aria-label={`Ver reglas de ${client.name}`}
                   >
                     <List size={14} /> Reglas
+                  </button>
+                  <button
+                    onClick={() => setPipelinesModal(client)}
+                    className="px-3 py-1.5 text-xs font-medium border border-brand-green/40 text-brand-green rounded-lg hover:bg-brand-green/10 flex items-center gap-1"
+                    aria-label={`Gestionar pipelines de ${client.name}`}
+                  >
+                    <Repeat2 size={14} /> Pipelines
                   </button>
                   <button
                     onClick={() => setCoverageModal(client)}
@@ -291,6 +382,9 @@ export const Clients: React.FC = () => {
       )}
       {compareModal && (
         <CompareModal client={compareModal} onClose={() => setCompareModal(null)} />
+      )}
+      {pipelinesModal && (
+        <ClientPipelinesModal client={pipelinesModal} onClose={() => setPipelinesModal(null)} />
       )}
       {mitreMatrixModal && (
         <ClientMitreModal client={mitreMatrixModal} onClose={() => setMitreMatrixModal(null)} />
@@ -527,6 +621,16 @@ const ClientFormModal: React.FC<{
   const [minLevel, setMinLevel] = useState<string>(editing?.filters?.min_level || '');
   const [statuses, setStatuses] = useState<string[]>(editing?.filters?.statuses || []);
   const [repoSourceIds, setRepoSourceIds] = useState<number[]>(editing?.filters?.repo_source_ids || []);
+  const [tagsInclude, setTagsInclude] = useState<string>(
+    (editing?.filters?.tags_include as string[] | undefined)?.join(', ') ?? ''
+  );
+  const [tagsExclude, setTagsExclude] = useState<string>(
+    (editing?.filters?.tags_exclude as string[] | undefined)?.join(', ') ?? ''
+  );
+  const [levels, setLevels] = useState<string[]>(editing?.filters?.levels || []);
+
+  const parseTagsInput = (raw: string): string[] =>
+    raw.split(',').map(t => t.trim()).filter(Boolean);
 
   // Dynamic options
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
@@ -556,6 +660,11 @@ const ClientFormModal: React.FC<{
     if (statuses.length) filters.statuses = statuses;
     if (repoSourceIds.length) filters.repo_source_ids = repoSourceIds;
     if (logoUrl.trim()) filters.logo_url = logoUrl.trim();
+    const parsedTagsInclude = parseTagsInput(tagsInclude);
+    const parsedTagsExclude = parseTagsInput(tagsExclude);
+    if (parsedTagsInclude.length) filters.tags_include = parsedTagsInclude;
+    if (parsedTagsExclude.length) filters.tags_exclude = parsedTagsExclude;
+    if (levels.length) filters.levels = levels;
     // Preserve rule_overrides set via RulesModal — editing the profile must not wipe them
     if (editing?.filters?.rule_overrides && Object.keys(editing.filters.rule_overrides).length) {
       filters.rule_overrides = editing.filters.rule_overrides;
@@ -725,6 +834,53 @@ const ClientFormModal: React.FC<{
                   </label>
                 ))}
               </div>
+            </div>
+          </div>
+
+          {/* Levels */}
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-1">Niveles exactos</label>
+            <p className="text-xs text-slate-500 mb-2">Filtra por nivel exacto. Dejá vacío para usar solo Nivel mínimo.</p>
+            <div className="flex flex-wrap gap-3 mt-1">
+              {['low', 'medium', 'high', 'critical'].map(l => (
+                <label key={l} className="flex items-center gap-1.5 text-sm text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={levels.includes(l)}
+                    onChange={e => {
+                      setLevels(e.target.checked ? [...levels, l] : levels.filter(x => x !== l));
+                    }}
+                    className="rounded border-a3sec-muted"
+                  />
+                  {l}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Tags incluidos</label>
+              <input
+                type="text"
+                value={tagsInclude}
+                onChange={e => setTagsInclude(e.target.value)}
+                placeholder="attack.t1078, attack.defense-evasion"
+                className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface"
+              />
+              <p className="text-xs text-slate-500 mt-1">Separar por coma. Solo reglas con estos tags.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Tags excluidos</label>
+              <input
+                type="text"
+                value={tagsExclude}
+                onChange={e => setTagsExclude(e.target.value)}
+                placeholder="deprecated, noisy"
+                className="w-full p-2 border border-a3sec-muted rounded-lg text-sm bg-a3sec-surface"
+              />
+              <p className="text-xs text-slate-500 mt-1">Separar por coma. Reglas con estos tags quedan excluidas.</p>
             </div>
           </div>
 

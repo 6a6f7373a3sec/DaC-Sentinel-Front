@@ -80,6 +80,21 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex-1" /> {/* Spacer */}
 
           <div className="flex items-center space-x-4">
+            <button
+              onClick={() => {
+                window.location.hash = '#/change-password';
+                setSidebarOpen(false);
+              }}
+              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                currentPath === '#/change-password'
+                  ? 'border-brand-green/30 bg-brand-green/15 text-brand-green'
+                  : 'border-a3sec-border text-slate-300 hover:border-brand-green/30 hover:bg-brand-green/10 hover:text-white'
+              }`}
+              title="Cambiar contraseña"
+            >
+              <Shield size={16} />
+              <span className="hidden sm:inline">Cambiar contraseña</span>
+            </button>
             <div className="flex flex-col items-end mr-2">
               <span className="text-sm font-semibold text-white">{user?.name}</span>
               <span className="text-xs text-slate-400">{user?.roles.join(', ')}</span>

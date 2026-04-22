@@ -4,6 +4,8 @@ import { GitRepoSource } from '../services/api';
 import { User, IndexStats, UserRole, ImportResult } from '../types';
 import { Users, Database, Play, Upload, GitMerge, FileArchive, Plus, Edit2, Trash2, AlertTriangle, CloudDownload, RefreshCw, FileText, HardDrive, CheckCircle, XCircle, Loader2, GitBranch, ExternalLink, ChevronRight } from 'lucide-react';
 import { Modal } from '../components/Modal';
+import { RepoEditModal } from '../components/RepoEditModal';
+import { AdminOpsTab } from '../components/AdminOpsTab';
 
 // --- USERS TAB ---
 const UsersTab: React.FC = () => {
@@ -615,6 +617,7 @@ const RepoSourcesTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [syncingId, setSyncingId] = useState<number | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingRepoId, setEditingRepoId] = useState<number | null>(null);
 
   const loadRepos = async () => {
     try {
@@ -713,6 +716,12 @@ const RepoSourcesTab: React.FC = () => {
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button
+                      onClick={() => setEditingRepoId(repo.id)}
+                      className="px-3 py-1.5 text-sm border border-a3sec-muted rounded-lg hover:bg-a3sec-deeper flex items-center gap-1"
+                    >
+                      <Edit2 size={14} /> Editar
+                    </button>
+                    <button
                       onClick={() => handleSync(repo.id)}
                       disabled={syncingId === repo.id}
                       className="px-3 py-1.5 text-sm border border-a3sec-muted rounded-lg hover:bg-a3sec-deeper disabled:opacity-50 flex items-center gap-1"
@@ -738,6 +747,14 @@ const RepoSourcesTab: React.FC = () => {
         <AddRepoModal
           onClose={() => setShowAddModal(false)}
           onCreated={() => { setShowAddModal(false); loadRepos(); }}
+        />
+      )}
+
+      {editingRepoId !== null && (
+        <RepoEditModal
+          repoId={editingRepoId}
+          onClose={() => setEditingRepoId(null)}
+          onSaved={loadRepos}
         />
       )}
     </>
@@ -1158,7 +1175,7 @@ const IndexerTab: React.FC = () => {
 };
 
 export const AdminPanel: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'users' | 'import' | 'repos' | 'local' | 'index'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'import' | 'repos' | 'ops' | 'local' | 'index'>('users');
 
   return (
     <div className="space-y-6">
@@ -1184,6 +1201,12 @@ export const AdminPanel: React.FC = () => {
           <GitMerge size={16} className="mr-2" /> Fuentes Git
         </button>
         <button
+          onClick={() => setActiveTab('ops')}
+          className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'ops' ? 'bg-a3sec-surface text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+        >
+          <RefreshCw size={16} className="mr-2" /> Admin Ops
+        </button>
+        <button
           onClick={() => setActiveTab('local')}
           className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all ${activeTab === 'local' ? 'bg-a3sec-surface text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
         >
@@ -1204,6 +1227,8 @@ export const AdminPanel: React.FC = () => {
           <ImportTab />
         ) : activeTab === 'repos' ? (
           <RepoSourcesTab />
+        ) : activeTab === 'ops' ? (
+          <AdminOpsTab />
         ) : activeTab === 'local' ? (
           <LocalRulesTab />
         ) : (

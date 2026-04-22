@@ -1,17 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { Shield } from 'lucide-react';
+import { AUTH_LOGIN_FLASH_KEY } from '../constants';
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const { login } = useAuth();
+
+  useEffect(() => {
+    const flash = sessionStorage.getItem(AUTH_LOGIN_FLASH_KEY);
+    if (!flash) return;
+
+    setSuccess(flash);
+    sessionStorage.removeItem(AUTH_LOGIN_FLASH_KEY);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess('');
     try {
       const response = await api.login(email, password);
       login(response.user);
@@ -33,6 +43,7 @@ export const Login: React.FC = () => {
         </div>
         
         <form onSubmit={handleSubmit} className="p-8 space-y-4">
+          {success && <div className="p-3 bg-brand-green/15 text-brand-green text-sm rounded-lg border border-brand-green/20">{success}</div>}
           {error && <div className="p-3 bg-brand-red/15 text-brand-red text-sm rounded-lg border border-brand-red/20">{error}</div>}
           
           <div>
@@ -73,3 +84,5 @@ export const Login: React.FC = () => {
     </div>
   );
 };
+
+export default Login;

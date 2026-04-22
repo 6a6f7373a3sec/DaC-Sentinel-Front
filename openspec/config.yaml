@@ -1,0 +1,36 @@
+schema: spec-driven
+context: |
+  Stack: React 19 + TypeScript + Vite SPA.
+  Architecture: hash routing in `App.tsx`, `AuthProvider` session context, single HTTP adapter in `services/api.ts`, page-centered UI with modal-heavy flows.
+  API: REST backend under `/api/v1` with JWT Bearer persisted in `localStorage`.
+  Style: no test runner, linter, or formatter detected; type safety available via `npx tsc --noEmit`.
+strict_tdd: false
+testing:
+  runner: null
+  unit: false
+  integration: false
+  e2e: false
+  coverage: false
+  typecheck: npx tsc --noEmit
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Identify affected modules/packages
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group tasks by phase (infrastructure, implementation, testing)
+    - Use hierarchical numbering (1.1, 1.2, etc.)
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow existing code patterns and conventions
+    - Load relevant coding skills for the project stack
+  verify:
+    - Run tests if test infrastructure exists
+    - Compare implementation against every spec scenario
+  archive:
+    - Warn before merging destructive deltas (large removals)
