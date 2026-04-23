@@ -6,6 +6,8 @@ import { Users, Database, Play, Upload, GitMerge, FileArchive, Plus, Edit2, Tras
 import { Modal } from '../components/Modal';
 import { RepoEditModal } from '../components/RepoEditModal';
 import { AdminOpsTab } from '../components/AdminOpsTab';
+import { ClientSelector, SelectedClient } from '../components/ClientSelector';
+import { injectClientTag, extractClientTag, clientNameToSlug } from '../utils/yamlTagInjector';
 
 // --- USERS TAB ---
 const UsersTab: React.FC = () => {
@@ -385,6 +387,7 @@ const LocalRulesTab: React.FC = () => {
   const [formYaml, setFormYaml] = useState('');
   const [overwrite, setOverwrite] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -415,6 +418,7 @@ const LocalRulesTab: React.FC = () => {
     setFormPath('ai/mi_regla.yml');
     setFormYaml('');
     setOverwrite(false);
+    setSelectedClient(null);
     setIsModalOpen(true);
   };
 
@@ -427,10 +431,20 @@ const LocalRulesTab: React.FC = () => {
 
     try {
       const detail = await api.getRuleDetails(String(rule.id));
-      setFormYaml((detail as any)?.yaml_content || '');
+      const yamlContent = (detail as any)?.yaml_content || '';
+      setFormYaml(yamlContent);
+      const slug = extractClientTag(yamlContent);
+      if (slug) {
+        const res = await api.listClients();
+        const match = res.items.find((c) => clientNameToSlug(c.name) === slug);
+        setSelectedClient(match ? { id: match.id, name: match.name, slug } : null);
+      } else {
+        setSelectedClient(null);
+      }
     } catch (e) {
       console.error(e);
       setFormYaml('');
+      setSelectedClient(null);
     }
   };
 
@@ -449,10 +463,11 @@ const LocalRulesTab: React.FC = () => {
     if (!formYaml.trim()) return;
     setSaving(true);
     try {
+      const finalYaml = injectClientTag(formYaml, selectedClient?.slug ?? null);
       if (mode === 'create') {
-        await api.createLocalRule(formPath.trim(), formYaml, overwrite, true);
+        await api.createLocalRule(formPath.trim(), finalYaml, overwrite, true);
       } else if (currentId) {
-        await api.updateLocalRule(currentId, formYaml, true);
+        await api.updateLocalRule(currentId, finalYaml, true);
       }
       setIsModalOpen(false);
       await load();
@@ -577,6 +592,12 @@ const LocalRulesTab: React.FC = () => {
               </div>
             )}
           </div>
+
+          <ClientSelector
+            value={selectedClient}
+            onChange={setSelectedClient}
+            disabled={saving}
+          />
 
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Contenido (YAML)</label>

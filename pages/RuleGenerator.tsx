@@ -3,6 +3,8 @@ import { api } from '../services/api';
 import { GenerateRuleResponse, UserRole } from '../types';
 import { Send, FileCheck, GitBranch, RefreshCw, Copy, Check, AlertCircle, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { ClientSelector, SelectedClient } from '../components/ClientSelector';
+import { injectClientTag } from '../utils/yamlTagInjector';
 
 export const RuleGenerator: React.FC = () => {
   const { user } = useAuth();
@@ -16,6 +18,7 @@ export const RuleGenerator: React.FC = () => {
 
   // Save rule as local (rules/local/*) so it gets indexed without losing SigmaHQ
   const canSaveLocal = !!user?.roles?.includes(UserRole.ADMIN);
+  const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null);
   const [localPath, setLocalPath] = useState('');
   const [overwrite, setOverwrite] = useState(false);
   const [savingLocal, setSavingLocal] = useState(false);
@@ -49,6 +52,7 @@ export const RuleGenerator: React.FC = () => {
     setProposalStatus('idle');
     setSaveLocalStatus('idle');
     setSaveLocalMsg(null);
+    setSelectedClient(null);
     try {
       const data = await api.generateRule(prompt);
       setResult(data);
@@ -94,8 +98,11 @@ export const RuleGenerator: React.FC = () => {
     setSaveLocalStatus('idle');
     setSaveLocalMsg(null);
     try {
-      const fixedYaml = sanitizeYamlTitle(result.yaml_code);
+      let fixedYaml = sanitizeYamlTitle(result.yaml_code);
       const titleFixed = fixedYaml !== result.yaml_code;
+      if (selectedClient) {
+        fixedYaml = injectClientTag(fixedYaml, selectedClient.slug);
+      }
       const resp = await api.createLocalRule(localPath.trim(), fixedYaml, overwrite, true);
       setSaveLocalStatus('success');
       setSaveLocalMsg(
@@ -179,6 +186,13 @@ export const RuleGenerator: React.FC = () => {
           </div>
 
           <div className="p-4 border-t border-a3sec-border bg-a3sec-surface space-y-3">
+            {canSaveLocal && (
+              <ClientSelector
+                value={selectedClient}
+                onChange={setSelectedClient}
+                disabled={savingLocal}
+              />
+            )}
             <div className="flex flex-col md:flex-row md:items-end gap-3">
               <div className="flex-1">
                 <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">
