@@ -184,12 +184,12 @@ export interface ClientRulesResponse {
 export interface ClientPipeline {
   id: number;
   client_id: number;
-  rule_id: number;
   pipeline_name: string;
   target_backend: string;
   target_format: string;
   position: number;
   pipeline_yaml: string;
+  vars?: Record<string, string> | null;
   created_by?: string | null;
   created_at?: string;
   updated_at?: string | null;
@@ -204,40 +204,36 @@ export interface ClientPipelinesResponse {
 }
 
 export interface ClientPipelineCreatePayload {
-  rule_id: number;
   pipeline_name: string;
   pipeline_yaml: string;
   target_backend: string;
   target_format: string;
   position: number;
+  vars?: Record<string, string> | null;
 }
 
-export type ClientPipelineUpdatePayload = Partial<Omit<ClientPipelineCreatePayload, 'rule_id'>>;
+export type ClientPipelineUpdatePayload = Partial<ClientPipelineCreatePayload>;
 
-export interface ClientRuleConversionResult {
+export interface ClientConvertPayload {
+  rule_yaml: string;
+  pipeline_ids: number[];
+  target_backend: string;
+  target_format?: string;
+  vars_override?: Record<string, string>;
+}
+
+export interface ClientConvertResult {
   client_id: number;
-  rule_id: number;
   backend: string;
   format: string;
   pipelines_used: number;
   result: string;
   warning?: string | null;
+  vars_used?: Record<string, string> | null;
 }
 
-export interface ClientBatchConversionItem {
-  rule_id: number;
-  title: string;
-  result: string | null;
-  error: string | null;
-}
-
-export interface ClientBatchConversionResult {
-  client_id: number;
-  total_rules: number;
-  success_count: number;
-  error_count: number;
-  results: ClientBatchConversionItem[];
-}
+/** @deprecated Use ClientConvertResult — kept for any remaining references */
+export type ClientRuleConversionResult = ClientConvertResult;
 
 export interface SigmaTargetOption {
   name: string;
@@ -803,11 +799,10 @@ class ApiService {
 
   async listClientPipelines(
     clientId: number,
-    params: { rule_id?: number; page?: number; page_size?: number } = {},
+    params: { page?: number; page_size?: number } = {},
   ): Promise<ClientPipelinesResponse> {
     const qs = new URLSearchParams();
-    const { rule_id, page = 1, page_size = 20 } = params;
-    if (typeof rule_id === 'number') qs.set('rule_id', String(rule_id));
+    const { page = 1, page_size = 20 } = params;
     qs.set('page', String(page));
     qs.set('page_size', String(page_size));
     return this.request<ClientPipelinesResponse>(`/clients/${clientId}/pipelines?${qs.toString()}`);
@@ -839,15 +834,10 @@ class ApiService {
     return this.request<void>(`/clients/${clientId}/pipelines/${pipelineId}`, { method: 'DELETE' });
   }
 
-  async convertClientRule(clientId: number, ruleId: number): Promise<ClientRuleConversionResult> {
-    return this.request<ClientRuleConversionResult>(`/clients/${clientId}/rules/${ruleId}/convert`, {
+  async convertForClient(clientId: number, payload: ClientConvertPayload): Promise<ClientConvertResult> {
+    return this.request<ClientConvertResult>(`/clients/${clientId}/convert`, {
       method: 'POST',
-    });
-  }
-
-  async convertAllClientRules(clientId: number): Promise<ClientBatchConversionResult> {
-    return this.request<ClientBatchConversionResult>(`/clients/${clientId}/convert-all`, {
-      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 
