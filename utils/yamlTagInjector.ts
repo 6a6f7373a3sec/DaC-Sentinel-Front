@@ -62,21 +62,23 @@ export function injectClientTag(yaml: string, slug: string | null): string {
     return cleaned;
   }
 
-  const tag = `  - client.${slug}`;
   const lines = cleaned.split('\n');
 
   // Find existing tags: block
   const tagsIdx = lines.findIndex((l) => /^tags:\s*$/.test(l));
 
   if (tagsIdx !== -1) {
-    // Append tag as last item in the tags block
+    // Auto-detect indentation from existing tag items in the block
+    const existingTagLine = lines.slice(tagsIdx + 1).find((l) => /^\s+-\s+/.test(l));
+    const indent = existingTagLine ? (existingTagLine.match(/^(\s+)/)?.[1] ?? '  ') : '  ';
+    const tag = `${indent}- client.${slug}`;
+
     // Find insertion point: after last tag item in block
+    // Stop on empty lines — they mark the end of the tags block
     let insertAt = tagsIdx + 1;
     for (let i = tagsIdx + 1; i < lines.length; i++) {
       if (/^\s+-\s+/.test(lines[i])) {
         insertAt = i + 1;
-      } else if (lines[i].trim() === '') {
-        continue;
       } else {
         break;
       }
@@ -86,6 +88,8 @@ export function injectClientTag(yaml: string, slug: string | null): string {
   }
 
   // No tags: block — insert before detection: or at end
+  // No tags block — build one with default 2-space indent
+  const tag = `  - client.${slug}`;
   const detectionIdx = lines.findIndex((l) => /^detection:/.test(l));
   const newBlock = ['tags:', tag];
 
