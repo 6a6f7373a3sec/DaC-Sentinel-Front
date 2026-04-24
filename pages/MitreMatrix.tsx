@@ -345,13 +345,18 @@ export const MitreMatrix: React.FC = () => {
   const [panelData, setPanelData] = useState<PanelData | null>(null);
   const [activeProduct, setActiveProduct] = useState('');
   const [products, setProducts] = useState<string[]>([]);
+  const [activeSector, setActiveSector] = useState('');
+  const [sectors, setSectors] = useState<string[]>([]);
   const [coveredTechIds, setCoveredTechIds] = useState<Set<string> | null>(null);
   const [loadingFilter, setLoadingFilter] = useState(false);
   const [productInput, setProductInput] = useState('');
 
   useEffect(() => {
     api.getFilters()
-      .then(f => setProducts(f.products ?? []))
+      .then(f => {
+        setProducts(f.products ?? []);
+        setSectors(f.sectors ?? []);
+      })
       .catch(() => {});
   }, []);
 
@@ -380,9 +385,13 @@ export const MitreMatrix: React.FC = () => {
       });
     };
 
+    const searchParams: Record<string, any> = { page: 1, page_size: PAGE_SIZE };
+    if (activeProduct) searchParams.product = activeProduct;
+    if (activeSector) searchParams.tag = `sector.${activeSector}`;
+
     const fetchAllPages = async () => {
       // First page
-      const first = await api.searchRules({ product: activeProduct, page: 1, page_size: PAGE_SIZE });
+      const first = await api.searchRules({ ...searchParams });
       if (cancelled) return;
       extractIds(first.rules ?? []);
 
@@ -391,7 +400,7 @@ export const MitreMatrix: React.FC = () => {
         // Remaining pages in parallel (cap at 20 pages = 2000 rules max)
         const remaining = Array.from(
           { length: Math.min(totalPages - 1, 19) },
-          (_, i) => api.searchRules({ product: activeProduct, page: i + 2, page_size: PAGE_SIZE })
+          (_, i) => api.searchRules({ ...searchParams, page: i + 2 })
         );
         const results = await Promise.allSettled(remaining);
         if (cancelled) return;
@@ -408,7 +417,7 @@ export const MitreMatrix: React.FC = () => {
       .finally(() => { if (!cancelled) setLoadingFilter(false); });
 
     return () => { cancelled = true; };
-  }, [activeProduct]);
+  }, [activeProduct, activeSector]);
 
   const getCellStyle = useCallback((techId: string, ruleCount: number): string => {
     if (ruleCount === 0) return 'bg-a3sec-surface border-a3sec-border text-slate-500 hover:bg-a3sec-deeper';
@@ -458,7 +467,7 @@ export const MitreMatrix: React.FC = () => {
     try {
       const [techDetail, rulesResp] = await Promise.allSettled([
         api.getMitreTechnique(tech.id),
-        api.getRulesByAttackTechnique(tech.id, 1, 50, productAtClick || undefined),
+        api.getRulesByAttackTechnique(tech.id, 1, 50, productAtClick || undefined, activeSector ? `sector.${activeSector}` : undefined),
       ]);
 
       const rulesData = rulesResp.status === 'fulfilled' ? rulesResp.value : null;
@@ -536,6 +545,32 @@ export const MitreMatrix: React.FC = () => {
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {sectors.length > 0 && (
+            <div className="flex items-center gap-2">
+              <select
+                value={activeSector}
+                onChange={e => setActiveSector(e.target.value)}
+                className={`pl-2 pr-6 py-1.5 text-xs rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                  activeSector ? 'border-blue-400 bg-brand-green/10 font-semibold text-brand-green' : 'border-a3sec-muted bg-a3sec-surface text-slate-300'
+                }`}
+              >
+                <option value="">Todos los sectores</option>
+                {sectors.map((s: string) => (
+                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                ))}
+              </select>
+              {activeSector && (
+                <button
+                  onClick={() => setActiveSector('')}
+                  aria-label="Limpiar sector"
+                  className="text-blue-400 hover:text-brand-green"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
           )}
 

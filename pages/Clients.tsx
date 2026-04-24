@@ -460,7 +460,7 @@ const ProductStatusEditor: React.FC<{
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
       {Object.entries(value).map(([product, entry]) => {
         const isOpen = expanded === product;
         const svcCount = Object.keys((entry as ProductStatusEntry).services).length;
@@ -860,7 +860,7 @@ const ClientFormModal: React.FC<{
           {filterOptions?.sectors && filterOptions.sectors.length > 0 && (
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1">Sectores</label>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 max-h-28 overflow-y-auto pr-1 custom-scrollbar">
                 {filterOptions.sectors.map((s: string) => {
                   const tag = `sector.${s}`;
                   const active = parseTagsInput(tagsInclude).includes(tag);
@@ -918,7 +918,7 @@ const ClientFormModal: React.FC<{
           {repos.length > 0 && (
             <div className="mb-4">
               <label className="block text-xs font-medium text-slate-400 mb-1">Fuentes Git (repos)</label>
-              <div className="space-y-1">
+              <div className="space-y-1 max-h-40 overflow-y-auto pr-1 custom-scrollbar">
                 {repos.map(r => (
                   <label key={r.id} className="flex items-center gap-2 text-sm text-slate-300 p-1">
                     <input

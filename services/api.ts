@@ -432,9 +432,11 @@ class ApiService {
     page = 1,
     page_size = 50,
     product?: string,
+    tag?: string,
   ): Promise<SearchResponse> {
     const q = new URLSearchParams({ page: String(page), page_size: String(page_size) });
     if (product) q.set('product', product);
+    if (tag) q.set('tag', tag);
     return this.request<SearchResponse>(`/dashboard/attack/${encodeURIComponent(technique_id)}?${q.toString()}`);
   }
 
