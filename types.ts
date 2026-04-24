@@ -47,6 +47,7 @@ export interface FilterOptions {
   levels: string[];
   statuses: string[];
   authors: string[];
+  sectors: string[];
 }
 
 export interface SearchResponse {

@@ -20,6 +20,7 @@ export const RuleSearch: React.FC = () => {
     product: '',
     author: '',
     source_type: '',
+    sector: '',
   });
 
   // Export State
@@ -57,7 +58,12 @@ export const RuleSearch: React.FC = () => {
         q: query,
         page,
         page_size: 20,
-        ...filters
+        level: filters.level,
+        status: filters.status,
+        product: filters.product,
+        author: filters.author,
+        source_type: filters.source_type,
+        tag: filters.sector ? `sector.${filters.sector}` : '',
       });
       setResults(response);
     } catch (error) {
@@ -99,7 +105,7 @@ export const RuleSearch: React.FC = () => {
   };
 
   const clearFilters = () => {
-    setFilters({ level: '', status: '', product: '', author: '', source_type: '' });
+    setFilters({ level: '', status: '', product: '', author: '', source_type: '', sector: '' });
     setQuery('');
     setPage(1);
   };
@@ -247,6 +253,18 @@ export const RuleSearch: React.FC = () => {
                 {SOURCE_TYPES.map(o => <option key={o.value || '__all__'} value={o.value}>{o.label}</option>)}
               </select>
             </div>
+
+            {filterOptions?.sectors && filterOptions.sectors.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase mb-1">Sector</label>
+                <select name="sector" value={filters.sector} onChange={handleFilterChange} className="w-full p-2 border border-a3sec-muted rounded-md text-sm bg-a3sec-deeper">
+                  <option value="">Todos los sectores</option>
+                  {filterOptions.sectors.map((s: string) => (
+                    <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           
           {showFilters && (

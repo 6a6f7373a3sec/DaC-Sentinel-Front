@@ -856,6 +856,38 @@ const ClientFormModal: React.FC<{
             </div>
           </div>
 
+          {/* Sector Picker */}
+          {filterOptions?.sectors && filterOptions.sectors.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1">Sectores</label>
+              <div className="flex flex-wrap gap-2">
+                {filterOptions.sectors.map((s: string) => {
+                  const tag = `sector.${s}`;
+                  const active = parseTagsInput(tagsInclude).includes(tag);
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => {
+                        const current = parseTagsInput(tagsInclude);
+                        const updated = active ? current.filter(t => t !== tag) : [...current, tag];
+                        setTagsInclude(updated.join(', '));
+                      }}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        active
+                          ? 'bg-brand-green/20 border-brand-green/50 text-brand-green'
+                          : 'bg-a3sec-deeper border-a3sec-muted text-slate-400 hover:border-brand-green/30'
+                      }`}
+                    >
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">Seleccioná los sectores para incluir sus reglas en el perfil.</p>
+            </div>
+          )}
+
           {/* Tags */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
