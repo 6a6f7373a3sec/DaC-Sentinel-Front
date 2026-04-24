@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -348,6 +348,14 @@ export const RulePipelinesModal: React.FC<RulePipelinesModalProps> = ({ isOpen, 
     window.setTimeout(() => setCopied(false), 1800);
   };
 
+  const feedbackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (feedback?.tone === 'error') {
+      feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [feedback]);
+
   const FeedbackIcon = feedback ? feedbackIcons[feedback.tone] : null;
 
   // ------------------------------------------------------------------ render
@@ -372,7 +380,7 @@ export const RulePipelinesModal: React.FC<RulePipelinesModalProps> = ({ isOpen, 
 
         {/* Feedback banner */}
         {feedback && FeedbackIcon && (
-          <div className={`rounded-xl border px-4 py-3 text-sm ${feedbackStyles[feedback.tone]}`}>
+          <div ref={feedbackRef} className={`rounded-xl border px-4 py-3 text-sm ${feedbackStyles[feedback.tone]}`}>
             <div className="flex items-start gap-2">
               <FeedbackIcon size={16} className="mt-0.5 shrink-0" />
               <span>{feedback.message}</span>
