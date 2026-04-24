@@ -4,12 +4,11 @@ import { api, resolveRuleStatus } from '../services/api';
 import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource, RuleOverride } from '../services/api';
 import { FilterOptions, MitreMatrixResponse, UserRole } from '../types';
 import { useAuth } from '../context/AuthContext';
-import { ClientPipelinesModal } from '../components/ClientPipelinesModal';
 import {
   Building2, Plus, Edit2, Trash2, Shield, BarChart3, AlertTriangle,
   GitCompare, Loader2, XCircle, ExternalLink, X, ChevronDown, ChevronRight,
   List, Filter, Search, Save, MessageSquare, ChevronLeft, Undo2,
-  LayoutGrid, ImageIcon, Upload, Download, FileText, Repeat2,
+  LayoutGrid, ImageIcon, Upload, Download, FileText,
 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { COLORS } from '../constants';
@@ -119,7 +118,6 @@ export const Clients: React.FC = () => {
   const [compareModal, setCompareModal] = useState<ClientProfile | null>(null);
   const [mitreMatrixModal, setMitreMatrixModal] = useState<ClientProfile | null>(null);
   const [reportModal, setReportModal] = useState<ClientProfile | null>(null);
-  const [pipelinesModal, setPipelinesModal] = useState<ClientProfile | null>(null);
 
   const loadClients = useCallback(async () => {
     try {
@@ -302,13 +300,7 @@ export const Clients: React.FC = () => {
                   >
                     <List size={14} /> Reglas
                   </button>
-                  <button
-                    onClick={() => setPipelinesModal(client)}
-                    className="px-3 py-1.5 text-xs font-medium border border-brand-green/40 text-brand-green rounded-lg hover:bg-brand-green/10 flex items-center gap-1"
-                    aria-label={`Gestionar pipelines de ${client.name}`}
-                  >
-                    <Repeat2 size={14} /> Pipelines
-                  </button>
+
                   <button
                     onClick={() => setCoverageModal(client)}
                     className="px-3 py-1.5 text-xs font-medium border border-a3sec-muted rounded-lg hover:bg-a3sec-deeper flex items-center gap-1"
@@ -383,9 +375,7 @@ export const Clients: React.FC = () => {
       {compareModal && (
         <CompareModal client={compareModal} onClose={() => setCompareModal(null)} />
       )}
-      {pipelinesModal && (
-        <ClientPipelinesModal client={pipelinesModal} onClose={() => setPipelinesModal(null)} />
-      )}
+
       {mitreMatrixModal && (
         <ClientMitreModal client={mitreMatrixModal} onClose={() => setMitreMatrixModal(null)} />
       )}
