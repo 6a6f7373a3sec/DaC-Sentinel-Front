@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { GitRepoSource } from '../services/api';
 import { User, IndexStats, UserRole, ImportResult } from '../types';
-import { Users, Database, Play, Upload, GitMerge, FileArchive, Plus, Edit2, Trash2, AlertTriangle, CloudDownload, RefreshCw, FileText, HardDrive, CheckCircle, XCircle, Loader2, GitBranch, ExternalLink, ChevronRight } from 'lucide-react';
+import { Users, Database, Play, Upload, GitMerge, FileArchive, Plus, Edit2, Trash2, AlertTriangle, CloudDownload, RefreshCw, FileText, HardDrive, CheckCircle, XCircle, Loader2, GitBranch, ExternalLink, ChevronRight, Repeat2 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { RepoEditModal } from '../components/RepoEditModal';
 import { AdminOpsTab } from '../components/AdminOpsTab';
 import { ClientSelector, SelectedClient } from '../components/ClientSelector';
 import { injectClientTag, extractClientTag, clientNameToSlug } from '../utils/yamlTagInjector';
+import { RulePipelinesModal } from '../components/RulePipelinesModal';
 
 // --- USERS TAB ---
 const UsersTab: React.FC = () => {
@@ -388,6 +389,13 @@ const LocalRulesTab: React.FC = () => {
   const [overwrite, setOverwrite] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedClient, setSelectedClient] = useState<SelectedClient | null>(null);
+  const [rulePipelinesOpen, setRulePipelinesOpen] = useState(false);
+  const [selectedRuleForPipelines, setSelectedRuleForPipelines] = useState<LocalRuleItem | null>(null);
+
+  const openPipelines = (rule: LocalRuleItem) => {
+    setSelectedRuleForPipelines(rule);
+    setRulePipelinesOpen(true);
+  };
 
   const load = async () => {
     setLoading(true);
@@ -534,6 +542,7 @@ const LocalRulesTab: React.FC = () => {
                     <td className="p-4 text-sm text-slate-400">{r.status || '-'}</td>
                     <td className="p-4 text-sm text-slate-400">{r.level || '-'}</td>
                     <td className="p-4 text-right space-x-2">
+                      <button onClick={() => openPipelines(r)} className="p-1 text-slate-400 hover:text-brand-green" title="Pipelines"><Repeat2 size={16} /></button>
                       <button onClick={() => openEdit(r)} className="p-1 text-slate-400 hover:text-brand-green"><Edit2 size={16} /></button>
                       <button onClick={() => handleDelete(String(r.id))} className="p-1 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
                     </td>
@@ -628,6 +637,15 @@ const LocalRulesTab: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {selectedRuleForPipelines && (
+        <RulePipelinesModal
+          isOpen={rulePipelinesOpen}
+          onClose={() => { setRulePipelinesOpen(false); setSelectedRuleForPipelines(null); }}
+          ruleId={Number(selectedRuleForPipelines.id)}
+          ruleTitle={selectedRuleForPipelines.title || selectedRuleForPipelines.path}
+        />
+      )}
     </>
   );
 };

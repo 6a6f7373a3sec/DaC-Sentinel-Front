@@ -235,6 +235,56 @@ export interface ClientConvertResult {
 /** @deprecated Use ClientConvertResult — kept for any remaining references */
 export type ClientRuleConversionResult = ClientConvertResult;
 
+// ── Rule Pipelines ────────────────────────────────────────────────────────
+export interface RulePipeline {
+  id: number;
+  rule_id: number;
+  pipeline_name: string;
+  target_backend: string;
+  target_format: string;
+  position: number;
+  pipeline_yaml: string;
+  vars?: Record<string, string> | null;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string | null;
+  warning?: string | null;
+}
+
+export interface RulePipelinesResponse {
+  items: RulePipeline[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface RulePipelineCreatePayload {
+  pipeline_name: string;
+  pipeline_yaml: string;
+  target_backend: string;
+  target_format: string;
+  position: number;
+  vars?: Record<string, string> | null;
+}
+
+export type RulePipelineUpdatePayload = Partial<RulePipelineCreatePayload>;
+
+export interface RuleConvertPayload {
+  target_backend: string;
+  target_format?: string;
+  vars_override?: Record<string, string>;
+}
+
+export interface RuleConvertResult {
+  rule_id: number;
+  backend: string;
+  format: string;
+  pipelines_used: number;
+  result: string;
+  warning?: string | null;
+  vars_used?: Record<string, string> | null;
+}
+
 export interface SigmaTargetOption {
   name: string;
   description: string;
@@ -839,6 +889,32 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  }
+
+  // ── Rule Pipelines ────────────────────────────────────────────────────────
+  async listRulePipelines(ruleId: number, params?: { page?: number; page_size?: number }): Promise<RulePipelinesResponse> {
+    const qs = params ? '?' + new URLSearchParams(Object.entries(params).filter(([,v]) => v !== undefined).map(([k,v]) => [k, String(v)])).toString() : '';
+    return this.request(`/rules/${ruleId}/pipelines${qs}`);
+  }
+
+  async createRulePipeline(ruleId: number, payload: RulePipelineCreatePayload): Promise<RulePipeline> {
+    return this.request(`/rules/${ruleId}/pipelines`, { method: 'POST', body: JSON.stringify(payload) });
+  }
+
+  async getRulePipeline(ruleId: number, pipelineId: number): Promise<RulePipeline> {
+    return this.request(`/rules/${ruleId}/pipelines/${pipelineId}`);
+  }
+
+  async updateRulePipeline(ruleId: number, pipelineId: number, payload: RulePipelineUpdatePayload): Promise<RulePipeline> {
+    return this.request(`/rules/${ruleId}/pipelines/${pipelineId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  }
+
+  async deleteRulePipeline(ruleId: number, pipelineId: number): Promise<void> {
+    return this.request(`/rules/${ruleId}/pipelines/${pipelineId}`, { method: 'DELETE' });
+  }
+
+  async convertRule(ruleId: number, payload: RuleConvertPayload): Promise<RuleConvertResult> {
+    return this.request(`/rules/${ruleId}/convert`, { method: 'POST', body: JSON.stringify(payload) });
   }
 
   // Sigma Converter

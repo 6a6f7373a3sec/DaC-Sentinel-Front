@@ -16,20 +16,21 @@ import {
 import {
   api,
   ApiError,
-  ClientConvertPayload,
-  ClientConvertResult,
-  ClientPipeline,
-  ClientPipelineCreatePayload,
-  ClientProfile,
+  RuleConvertPayload,
+  RuleConvertResult,
+  RulePipeline,
+  RulePipelineCreatePayload,
   SigmaFormatOption,
   SigmaTargetOption,
 } from '../services/api';
 import { Modal } from './Modal';
 import { sanitizePipelineYaml } from '../utils/pipelineSanitizer';
 
-interface ClientPipelinesModalProps {
-  client: ClientProfile;
+interface RulePipelinesModalProps {
+  isOpen: boolean;
   onClose: () => void;
+  ruleId: number;
+  ruleTitle: string;
 }
 
 type FeedbackTone = 'success' | 'warning' | 'error';
@@ -77,9 +78,9 @@ const tryParseVarsJson = (raw: string): Record<string, string> | null => {
   }
 };
 
-export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ client, onClose }) => {
+export const RulePipelinesModal: React.FC<RulePipelinesModalProps> = ({ isOpen, onClose, ruleId, ruleTitle }) => {
   // --- Pipeline list state ---
-  const [pipelines, setPipelines]           = useState<ClientPipeline[]>([]);
+  const [pipelines, setPipelines]           = useState<RulePipeline[]>([]);
   const [targets, setTargets]               = useState<SigmaTargetOption[]>([]);
   const [formats, setFormats]               = useState<SigmaFormatOption[]>([]);
   const [loadingTargets, setLoadingTargets] = useState(true);
@@ -103,12 +104,11 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
   const [removedKeys, setRemovedKeys]     = useState<string[]>([]);
 
   // --- Conversion state ---
-  const [converting, setConverting]               = useState(false);
-  const [conversionResult, setConversionResult]   = useState<ClientConvertResult | null>(null);
-  const [convertRuleYaml, setConvertRuleYaml]     = useState('');
-  const [convertBackend, setConvertBackend]       = useState('');
-  const [convertFormat, setConvertFormat]         = useState('default');
-  const [selectedPipelineIds, setSelectedPipelineIds] = useState<Set<number>>(new Set());
+  const [converting, setConverting]             = useState(false);
+  const [conversionResult, setConversionResult] = useState<RuleConvertResult | null>(null);
+  const [convertBackend, setConvertBackend]     = useState('');
+  const [convertFormat, setConvertFormat]       = useState('default');
+  const [convertVarsJson, setConvertVarsJson]   = useState('');
 
   // ------------------------------------------------------------------ loaders
 
@@ -116,7 +116,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
     setLoadingPipelines(true);
     setPipelinesError(null);
     try {
-      const first = await api.listClientPipelines(client.id, { page: 1, page_size: 100 });
+      const first = await api.listRulePipelines(ruleId, { page: 1, page_size: 100 });
       let items = [...first.items];
       const totalPages = Math.min(
         Math.max(1, Math.ceil((first.total || first.items.length) / (first.page_size || 100))),
@@ -125,7 +125,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
       if (totalPages > 1) {
         const rest = await Promise.allSettled(
           Array.from({ length: totalPages - 1 }, (_, i) =>
-            api.listClientPipelines(client.id, { page: i + 2, page_size: 100 }),
+            api.listRulePipelines(ruleId, { page: i + 2, page_size: 100 }),
           ),
         );
         for (const r of rest) {
@@ -135,11 +135,11 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
       items.sort((a, b) => a.position - b.position || a.pipeline_name.localeCompare(b.pipeline_name));
       setPipelines(items);
     } catch (error) {
-      setPipelinesError(getErrorMessage(error, 'Error cargando pipelines del cliente.'));
+      setPipelinesError(getErrorMessage(error, 'Error cargando pipelines de la regla.'));
     } finally {
       setLoadingPipelines(false);
     }
-  }, [client.id]);
+  }, [ruleId]);
 
   const loadTargets = useCallback(async () => {
     setLoadingTargets(true);
@@ -184,7 +184,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
     setTargetFormat('default');
   }, [targets]);
 
-  const applyPipelineToForm = useCallback((p: ClientPipeline) => {
+  const applyPipelineToForm = useCallback((p: RulePipeline) => {
     setEditingId(p.id);
     setPipelineName(p.pipeline_name);
     setTargetBackend(p.target_backend);
@@ -219,11 +219,11 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
     resetForm();
   };
 
-  const handleEdit = async (pipeline: ClientPipeline) => {
+  const handleEdit = async (pipeline: RulePipeline) => {
     setLoadingDetailId(pipeline.id);
     setFeedback(null);
     try {
-      const detail = await api.getClientPipeline(client.id, pipeline.id);
+      const detail = await api.getRulePipeline(ruleId, pipeline.id);
       applyPipelineToForm(detail);
     } catch (error) {
       setFeedback({ tone: 'error', message: getErrorMessage(error, 'No se pudo cargar el pipeline.') });
@@ -232,14 +232,13 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
     }
   };
 
-  const handleDelete = async (pipeline: ClientPipeline) => {
+  const handleDelete = async (pipeline: RulePipeline) => {
     if (!confirm(`¿Eliminar el pipeline "${pipeline.pipeline_name}"?`)) return;
     setDeletingId(pipeline.id);
     setFeedback(null);
     try {
-      await api.deleteClientPipeline(client.id, pipeline.id);
+      await api.deleteRulePipeline(ruleId, pipeline.id);
       if (editingId === pipeline.id) resetForm();
-      setSelectedPipelineIds(prev => { const s = new Set(prev); s.delete(pipeline.id); return s; });
       await loadPipelines();
       setFeedback({ tone: 'success', message: 'Pipeline eliminado correctamente.' });
     } catch (error) {
@@ -277,7 +276,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
 
     try {
       const parsedVars = varsJson.trim() ? tryParseVarsJson(varsJson) : null;
-      const payload: ClientPipelineCreatePayload = {
+      const payload: RulePipelineCreatePayload = {
         pipeline_name:  pipelineName.trim(),
         pipeline_yaml:  sanitized.yaml.trim(),
         target_backend: targetBackend.trim(),
@@ -287,7 +286,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
       };
 
       const response = editingId !== null
-        ? await api.updateClientPipeline(client.id, editingId, {
+        ? await api.updateRulePipeline(ruleId, editingId, {
             pipeline_name:  payload.pipeline_name,
             pipeline_yaml:  payload.pipeline_yaml,
             target_backend: payload.target_backend,
@@ -295,7 +294,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
             position:       payload.position,
             vars:           payload.vars,
           })
-        : await api.createClientPipeline(client.id, payload);
+        : await api.createRulePipeline(ruleId, payload);
 
       applyPipelineToForm(response);
       await loadPipelines();
@@ -310,23 +309,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
     }
   };
 
-  const togglePipelineSelection = (id: number) => {
-    setSelectedPipelineIds(prev => {
-      const s = new Set(prev);
-      s.has(id) ? s.delete(id) : s.add(id);
-      return s;
-    });
-  };
-
   const handleConvert = async () => {
-    if (!convertRuleYaml.trim()) {
-      setFeedback({ tone: 'error', message: 'Pegá el YAML de la regla Sigma para convertir.' });
-      return;
-    }
-    if (selectedPipelineIds.size === 0) {
-      setFeedback({ tone: 'error', message: 'Seleccioná al menos un pipeline.' });
-      return;
-    }
     if (!convertBackend.trim()) {
       setFeedback({ tone: 'error', message: 'Seleccioná un backend objetivo para la conversión.' });
       return;
@@ -337,20 +320,15 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
     setConversionResult(null);
 
     try {
-      const orderedIds = [...selectedPipelineIds].sort((a, b) => {
-        const pa = pipelines.find(p => p.id === a);
-        const pb = pipelines.find(p => p.id === b);
-        return (pa?.position ?? 0) - (pb?.position ?? 0);
-      });
+      const parsedVarsOverride = convertVarsJson.trim() ? tryParseVarsJson(convertVarsJson) : undefined;
 
-      const payload: ClientConvertPayload = {
-        rule_yaml:    convertRuleYaml.trim(),
-        pipeline_ids: orderedIds,
+      const payload: RuleConvertPayload = {
         target_backend: convertBackend.trim(),
         target_format:  convertFormat || 'default',
+        ...(parsedVarsOverride ? { vars_override: parsedVarsOverride } : {}),
       };
 
-      const response = await api.convertForClient(client.id, payload);
+      const response = await api.convertRule(ruleId, payload);
       setConversionResult(response);
       if (response.warning) {
         setFeedback({ tone: 'warning', message: response.warning });
@@ -375,7 +353,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
   // ------------------------------------------------------------------ render
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Pipelines — ${client.name}`} size="3xl">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Pipelines — ${ruleTitle}`} size="3xl">
       <div className="space-y-6">
 
         {/* Header info */}
@@ -383,10 +361,10 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
           <div className="flex items-start gap-3">
             <Repeat2 size={18} className="mt-0.5 shrink-0 text-brand-green" />
             <div>
-              <div className="font-semibold text-white">Pipelines del cliente</div>
+              <div className="font-semibold text-white">Pipelines de la regla</div>
               <p className="mt-1 text-slate-300">
-                Cada pipeline es una <strong className="text-white">función pura</strong> aplicable a cualquier regla Sigma.
-                La variación por regla vive en <code className="text-brand-green">vars</code>, no en el pipeline.
+                Cada pipeline es una <strong className="text-white">función pura</strong> aplicable a esta regla Sigma.
+                La variación vive en <code className="text-brand-green">vars</code>, no en el pipeline.
               </p>
             </div>
           </div>
@@ -412,7 +390,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Inventario</h3>
-                  <p className="text-xs text-slate-500 mt-1">{pipelines.length} pipeline(s) · Seleccioná los que usarás en la conversión</p>
+                  <p className="text-xs text-slate-500 mt-1">{pipelines.length} pipeline(s) configurado(s)</p>
                 </div>
                 <div className="flex gap-2">
                   <button type="button" onClick={handleRefresh}
@@ -441,42 +419,32 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
                 </div>
               ) : pipelines.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-a3sec-border px-4 py-8 text-center text-sm text-slate-500">
-                  No hay pipelines para este cliente todavía.
+                  Esta regla no tiene pipelines configurados. Agregá al menos uno para poder convertir.
                 </div>
               ) : (
                 <div className="space-y-3">
                   {pipelines.map(pipeline => (
                     <div key={pipeline.id}
-                      className={`rounded-xl border p-4 transition-colors ${selectedPipelineIds.has(pipeline.id) ? 'border-brand-green/50 bg-brand-green/5' : 'border-a3sec-border bg-a3sec-deeper/70'}`}>
+                      className="rounded-xl border border-a3sec-border bg-a3sec-deeper/70 p-4 transition-colors">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="flex min-w-0 flex-1 gap-3">
-
-                          {/* Checkbox for conversion selection */}
-                          <input type="checkbox"
-                            checked={selectedPipelineIds.has(pipeline.id)}
-                            onChange={() => togglePipelineSelection(pipeline.id)}
-                            className="mt-1 h-4 w-4 shrink-0 accent-brand-green cursor-pointer"
-                          />
-
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="text-sm font-semibold text-white">{pipeline.pipeline_name}</h4>
-                              <span className="rounded-full border border-a3sec-border px-2 py-0.5 text-[11px] text-slate-400">
-                                pos {pipeline.position}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-sm font-semibold text-white">{pipeline.pipeline_name}</h4>
+                            <span className="rounded-full border border-a3sec-border px-2 py-0.5 text-[11px] text-slate-400">
+                              pos {pipeline.position}
+                            </span>
+                            {pipeline.vars && Object.keys(pipeline.vars).length > 0 && (
+                              <span className="rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300">
+                                vars: {Object.keys(pipeline.vars).join(', ')}
                               </span>
-                              {pipeline.vars && Object.keys(pipeline.vars).length > 0 && (
-                                <span className="rounded-full border border-indigo-500/40 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300">
-                                  vars: {Object.keys(pipeline.vars).join(', ')}
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
-                              <span className="rounded-full border border-a3sec-border px-2 py-0.5">backend: {pipeline.target_backend}</span>
-                              <span className="rounded-full border border-a3sec-border px-2 py-0.5">format: {pipeline.target_format}</span>
-                              <span className="rounded-full border border-a3sec-border px-2 py-0.5">
-                                {formatTimestamp(pipeline.updated_at || pipeline.created_at)}
-                              </span>
-                            </div>
+                            )}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-400">
+                            <span className="rounded-full border border-a3sec-border px-2 py-0.5">backend: {pipeline.target_backend}</span>
+                            <span className="rounded-full border border-a3sec-border px-2 py-0.5">format: {pipeline.target_format}</span>
+                            <span className="rounded-full border border-a3sec-border px-2 py-0.5">
+                              {formatTimestamp(pipeline.updated_at || pipeline.created_at)}
+                            </span>
                           </div>
                         </div>
 
@@ -506,51 +474,57 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
               <div>
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Conversión</h3>
                 <p className="mt-1 text-xs text-slate-500">
-                  Seleccioná pipelines del inventario (arriba), pegá la regla Sigma y ejecutá.
+                  Convierte esta regla usando los pipelines configurados.
                 </p>
               </div>
 
-              <div>
-                <label className="mb-1 block text-xs font-medium text-slate-400">
-                  Regla Sigma (YAML) · {selectedPipelineIds.size} pipeline(s) seleccionado(s)
-                </label>
-                <textarea
-                  value={convertRuleYaml}
-                  onChange={e => setConvertRuleYaml(e.target.value)}
-                  rows={6}
-                  placeholder={"title: My Detection\nlogsource:\n  product: windows\ndetection:\n  selection:\n    EventID: 4625\n  condition: selection"}
-                  className="w-full rounded-lg border border-a3sec-muted bg-a3sec-deeper p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-brand-green"
-                />
-              </div>
+              {pipelines.length === 0 && !loadingPipelines ? (
+                <div className="rounded-lg border border-dashed border-a3sec-border px-4 py-6 text-center text-sm text-slate-500">
+                  Esta regla no tiene pipelines configurados. Agregá al menos uno para poder convertir.
+                </div>
+              ) : (
+                <>
+                  <div className="grid gap-3 md:grid-cols-[1fr,1fr,auto] md:items-end">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-400">Backend</label>
+                      <div className="relative">
+                        <select value={convertBackend} onChange={e => setConvertBackend(e.target.value)}
+                          disabled={loadingTargets}
+                          className="w-full appearance-none rounded-lg border border-a3sec-muted bg-a3sec-deeper p-2.5 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green disabled:opacity-60">
+                          <option value="">Seleccioná...</option>
+                          {targets.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+                        </select>
+                        <ChevronDown size={16} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                      </div>
+                    </div>
 
-              <div className="grid gap-3 md:grid-cols-[1fr,1fr,auto] md:items-end">
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-400">Backend</label>
-                  <div className="relative">
-                    <select value={convertBackend} onChange={e => setConvertBackend(e.target.value)}
-                      disabled={loadingTargets}
-                      className="w-full appearance-none rounded-lg border border-a3sec-muted bg-a3sec-deeper p-2.5 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green disabled:opacity-60">
-                      <option value="">Seleccioná...</option>
-                      {targets.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
-                    </select>
-                    <ChevronDown size={16} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-400">Formato</label>
+                      <input value={convertFormat} onChange={e => setConvertFormat(e.target.value)}
+                        placeholder="default"
+                        className="w-full rounded-lg border border-a3sec-muted bg-a3sec-deeper p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green" />
+                    </div>
+
+                    <button type="button" onClick={handleConvert}
+                      disabled={converting || !convertBackend.trim()}
+                      className="inline-flex items-center justify-center gap-2 rounded-lg border border-brand-green/40 px-4 py-2.5 text-sm font-medium text-brand-green hover:bg-brand-green/10 disabled:opacity-60">
+                      {converting ? <Loader2 size={15} className="animate-spin" /> : <Repeat2 size={15} />}
+                      Convertir
+                    </button>
                   </div>
-                </div>
 
-                <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-400">Formato</label>
-                  <input value={convertFormat} onChange={e => setConvertFormat(e.target.value)}
-                    placeholder="default"
-                    className="w-full rounded-lg border border-a3sec-muted bg-a3sec-deeper p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green" />
-                </div>
-
-                <button type="button" onClick={handleConvert}
-                  disabled={converting || selectedPipelineIds.size === 0 || !convertRuleYaml.trim()}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-brand-green/40 px-4 py-2.5 text-sm font-medium text-brand-green hover:bg-brand-green/10 disabled:opacity-60">
-                  {converting ? <Loader2 size={15} className="animate-spin" /> : <Repeat2 size={15} />}
-                  Convertir
-                </button>
-              </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-slate-400">vars_override (JSON) — opcional</label>
+                    <textarea
+                      value={convertVarsJson}
+                      onChange={e => setConvertVarsJson(e.target.value)}
+                      rows={3}
+                      placeholder={'{\n  "index": "win_logs"\n}'}
+                      className="w-full rounded-lg border border-a3sec-muted bg-a3sec-deeper p-3 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-brand-green"
+                    />
+                  </div>
+                </>
+              )}
 
               {conversionResult && (
                 <div className="rounded-xl border border-a3sec-border bg-a3sec-deeper/70 p-4 space-y-3">
@@ -558,7 +532,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
                     <div>
                       <h4 className="text-sm font-semibold text-white">Resultado</h4>
                       <p className="mt-1 text-xs text-slate-500">
-                        backend: {conversionResult.backend} · format: {conversionResult.format} · {conversionResult.pipelines_used} pipeline(s)
+                        rule_id: {conversionResult.rule_id} · backend: {conversionResult.backend} · format: {conversionResult.format} · {conversionResult.pipelines_used} pipeline(s)
                       </p>
                     </div>
                     <button type="button" onClick={copyConversionResult}
@@ -642,7 +616,7 @@ export const ClientPipelinesModal: React.FC<ClientPipelinesModalProps> = ({ clie
                 <label className="mb-1 block text-xs font-medium text-slate-400">Posición</label>
                 <input type="number" min={0} step={1} value={position} onChange={e => setPosition(e.target.value)}
                   className="w-full rounded-lg border border-a3sec-muted bg-a3sec-deeper p-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-green" />
-                <p className="mt-1 text-xs text-slate-500">Pipelines del mismo cliente se encadenan por `position` ASC.</p>
+                <p className="mt-1 text-xs text-slate-500">Pipelines de la misma regla se encadenan por `position` ASC.</p>
               </div>
 
               <div>
