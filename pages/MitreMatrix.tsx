@@ -482,7 +482,7 @@ export const MitreMatrix: React.FC = () => {
     } catch {
       setPanelData(prev => prev ? { ...prev, loadingRules: false } : null);
     }
-  }, [activeProduct]);
+  }, [activeProduct, activeSector]);
 
   const handleClose = useCallback(() => {
     setSelectedId(null);
