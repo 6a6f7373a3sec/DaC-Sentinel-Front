@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { toPng } from 'html-to-image';
 import { api, resolveRuleStatus } from '../services/api';
+import { clientNameToSlug } from '../utils/yamlTagInjector';
 import { ClientProfile, ClientCoverage, ClientGaps, ClientCompare, GitRepoSource, RuleOverride } from '../services/api';
 import { FilterOptions, MitreMatrixResponse, UserRole } from '../types';
 import { useAuth } from '../context/AuthContext';
@@ -652,6 +653,13 @@ const ClientFormModal: React.FC<{
     if (logoUrl.trim()) filters.logo_url = logoUrl.trim();
     const parsedTagsInclude = parseTagsInput(tagsInclude);
     const parsedTagsExclude = parseTagsInput(tagsExclude);
+    // Auto-inject the client's own tag when creating a new profile
+    if (!editing) {
+      const autoTag = `client.${clientNameToSlug(name.trim())}`;
+      if (autoTag !== 'client.' && !parsedTagsInclude.includes(autoTag)) {
+        parsedTagsInclude.unshift(autoTag);
+      }
+    }
     if (parsedTagsInclude.length) filters.tags_include = parsedTagsInclude;
     if (parsedTagsExclude.length) filters.tags_exclude = parsedTagsExclude;
     if (levels.length) filters.levels = levels;

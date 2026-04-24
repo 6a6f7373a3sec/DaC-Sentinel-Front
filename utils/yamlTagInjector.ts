@@ -9,7 +9,7 @@ export function clientNameToSlug(name: string): string {
 }
 
 export function extractClientTag(yaml: string): string | null {
-  const match = yaml.match(/^\s+-\s+client\.([a-z0-9_]+)\s*$/m);
+  const match = yaml.match(/^\s+-\s+client\.([a-zA-Z0-9_]+)\s*$/im);
   return match ? match[1] : null;
 }
 
@@ -20,7 +20,7 @@ export function removeClientTags(yaml: string): string {
 
   while (i < lines.length) {
     const line = lines[i];
-    if (/^\s+-\s+client\.[a-z0-9_]+\s*$/.test(line)) {
+    if (/^\s+-\s+client\.[a-zA-Z0-9_]+\s*$/i.test(line)) {
       i++;
       continue;
     }
