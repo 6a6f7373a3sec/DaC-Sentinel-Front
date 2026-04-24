@@ -349,7 +349,6 @@ export const MitreMatrix: React.FC = () => {
   const [sectors, setSectors] = useState<string[]>([]);
   const [coveredTechIds, setCoveredTechIds] = useState<Set<string> | null>(null);
   const [loadingFilter, setLoadingFilter] = useState(false);
-  const [productInput, setProductInput] = useState('');
 
   useEffect(() => {
     api.getFilters()
@@ -361,7 +360,7 @@ export const MitreMatrix: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!activeProduct) {
+    if (!activeProduct && !activeSector) {
       setCoveredTechIds(null);
       return;
     }
@@ -421,11 +420,11 @@ export const MitreMatrix: React.FC = () => {
 
   const getCellStyle = useCallback((techId: string, ruleCount: number): string => {
     if (ruleCount === 0) return 'bg-a3sec-surface border-a3sec-border text-slate-500 hover:bg-a3sec-deeper';
-    if (!activeProduct || coveredTechIds === null) return 'bg-green-100 border-green-300 text-green-900 hover:bg-green-200';
+    if ((!activeProduct && !activeSector) || coveredTechIds === null) return 'bg-green-100 border-green-300 text-green-900 hover:bg-green-200';
     const covered = coveredTechIds.has(techId.toUpperCase());
     if (covered) return 'bg-blue-100 border-blue-400 text-blue-900 hover:bg-blue-200';
     return 'bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100';
-  }, [activeProduct, coveredTechIds]);
+  }, [activeProduct, activeSector, coveredTechIds]);
 
   const fetchData = async () => {
     try {
@@ -505,42 +504,18 @@ export const MitreMatrix: React.FC = () => {
             <div className="flex items-center gap-2">
               <Filter size={14} className="text-slate-400 shrink-0" />
               <div className="relative">
-                <input
-                  list="mitre-products-list"
-                  value={productInput}
-                  onChange={e => setProductInput(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      const match = products.find(p => p.toLowerCase() === productInput.toLowerCase());
-                      setActiveProduct(match ?? '');
-                      if (!match) setProductInput('');
-                    }
-                    if (e.key === 'Escape') { setActiveProduct(''); setProductInput(''); }
-                  }}
-                  onBlur={() => {
-                    const match = products.find(p => p.toLowerCase() === productInput.toLowerCase());
-                    if (match) { setActiveProduct(match); setProductInput(match); }
-                    else { setActiveProduct(''); setProductInput(''); }
-                  }}
-                  placeholder="Filtrar por producto..."
-                  className={`pl-3 pr-8 py-1.5 text-xs rounded-lg border transition-colors w-48 focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+                <select
+                  value={activeProduct}
+                  onChange={e => setActiveProduct(e.target.value)}
+                  className={`pl-2 pr-6 py-1.5 text-xs rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${
                     activeProduct ? 'border-blue-400 bg-brand-green/10 font-semibold text-brand-green' : 'border-a3sec-muted bg-a3sec-surface text-slate-300'
                   }`}
-                />
-                <datalist id="mitre-products-list">
-                  {products.map(p => <option key={p} value={p} />)}
-                </datalist>
-                {activeProduct && !loadingFilter && (
-                  <button
-                    onClick={() => { setActiveProduct(''); setProductInput(''); }}
-                    aria-label="Limpiar filtro"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-400 hover:text-brand-green"
-                  >
-                    <X size={12} />
-                  </button>
-                )}
+                >
+                  <option value="">Filtrar por producto...</option>
+                  {products.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
                 {loadingFilter && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
                     <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-500" />
                   </div>
                 )}
